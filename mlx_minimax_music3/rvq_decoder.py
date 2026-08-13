@@ -111,6 +111,7 @@ def generate_depth_codes(
     *,
     cfg_scale: float = 1.5,
     top_k: int = 50,
+    model_config: ModelConfig | None = None,
 ) -> tuple[mx.array, mx.array, mx.array]:
     """Generate residual RVQ codes for one conditional/unconditional frame pair."""
     if last_hidden.shape != (2, decoder.config.hidden_size):
@@ -118,7 +119,7 @@ def generate_depth_codes(
     if semantic_code.shape != (2,):
         raise ValueError("semantic_code must have shape [2]")
 
-    model_config = ModelConfig()
+    model_config = model_config or ModelConfig()
     sequence = [decoder.projection(last_hidden)[:, None, :]]
     semantic_embed = language_model.model.embed_tokens(
         semantic_code + model_config.audio_code_offset
@@ -148,10 +149,11 @@ def embed_audio_frame(
     language_model: LanguageModel,
     decoder: RVQDepthDecoder,
     frame_codes: mx.array,
+    model_config: ModelConfig | None = None,
 ) -> mx.array:
     if frame_codes.shape != (2, decoder.config.num_codebooks):
         raise ValueError(f"frame_codes must have shape [2, {decoder.config.num_codebooks}]")
-    model_config = ModelConfig()
+    model_config = model_config or ModelConfig()
     semantic = language_model.model.embed_tokens(
         frame_codes[:, :1] + model_config.audio_code_offset
     )
@@ -161,4 +163,3 @@ def embed_audio_frame(
     return (semantic + mx.sum(residual, axis=1, keepdims=True)) * (
         decoder.config.num_codebooks**-0.5
     )
-
