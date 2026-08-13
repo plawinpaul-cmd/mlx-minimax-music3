@@ -2,11 +2,13 @@ import json
 
 import mlx.core as mx
 import numpy as np
+import pytest
 from mlx.utils import tree_flatten
 
 from mlx_minimax_music3.checkpoint import apply_component_quantization, load_component
 from mlx_minimax_music3.conversion import (
     convert_component,
+    convert_component_source_shard,
     convert_tensor,
     convert_vocoder_weights,
 )
@@ -80,6 +82,7 @@ def test_language_conversion_round_trip_strict_load(tmp_path) -> None:
         shard_size=40_000,
     )
     assert manifest["status"] == "complete"
+    assert manifest["processed_source_files"] == ["model.safetensors"]
     assert len(manifest["shards"]) > 1
 
     converted = load_component(
@@ -133,3 +136,44 @@ def test_conversion_index_covers_every_manifest_tensor(tmp_path) -> None:
     index = json.loads(index_path.read_text())
 
     assert index["weight_map"] == dict(sorted(manifest["weight_map"].items()))
+
+
+def test_component_can_convert_one_source_shard_at_a_time(tmp_path) -> None:
+    source_dir = tmp_path / "source" / "language_model"
+    source_dir.mkdir(parents=True)
+    mx.save_safetensors(source_dir / "part-a.safetensors", {"model.norm.weight": mx.ones((64,))})
+    mx.save_safetensors(source_dir / "part-b.safetensors", {"lm_head.weight": mx.ones((128, 64))})
+    index = {
+        "weight_map": {
+            "model.norm.weight": "part-a.safetensors",
+            "lm_head.weight": "part-b.safetensors",
+        }
+    }
+    (source_dir / "model.safetensors.index.json").write_text(json.dumps(index))
+
+    first = convert_component_source_shard(
+        tmp_path / "source", tmp_path / "target", "language_model", "part-a.safetensors"
+    )
+    assert first["status"] == "in_progress"
+    assert first["processed_source_files"] == ["part-a.safetensors"]
+    assert not (tmp_path / "target" / "language_model" / "model.safetensors.index.json").exists()
+
+    second = convert_component_source_shard(
+        tmp_path / "source", tmp_path / "target", "language_model", "part-b.safetensors"
+    )
+    assert second["status"] == "complete"
+    assert second["processed_source_files"] == ["part-a.safetensors", "part-b.safetensors"]
+    assert (tmp_path / "target" / "language_model" / "model.safetensors.index.json").is_file()
+
+
+def test_incremental_conversion_rejects_unindexed_source(tmp_path) -> None:
+    source_dir = tmp_path / "source" / "transformer"
+    source_dir.mkdir(parents=True)
+    mx.save_safetensors(source_dir / "expected.safetensors", {"proj_out.weight": mx.ones((64, 64))})
+    (source_dir / "diffusion_pytorch_model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"proj_out.weight": "expected.safetensors"}})
+    )
+    with pytest.raises(ValueError, match="official index"):
+        convert_component_source_shard(
+            tmp_path / "source", tmp_path / "target", "transformer", "other.safetensors"
+        )

@@ -41,7 +41,8 @@ def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
     temporary.replace(path)
 
 
-def _source_weight_files(component_dir: Path) -> list[Path]:
+def source_weight_inventory(component_dir: Path) -> list[Path]:
+    """Return the complete source shard inventory without requiring downloads."""
     for index_name in (
         "model.safetensors.index.json",
         "diffusion_pytorch_model.safetensors.index.json",
@@ -52,8 +53,7 @@ def _source_weight_files(component_dir: Path) -> list[Path]:
             weight_map = index.get("weight_map")
             if not isinstance(weight_map, dict) or not weight_map:
                 raise ValueError(f"invalid source shard index: {index_path}")
-            files = [component_dir / name for name in sorted(set(weight_map.values()))]
-            break
+            return [component_dir / name for name in sorted(set(weight_map.values()))]
     else:
         files = [
             path
@@ -62,6 +62,11 @@ def _source_weight_files(component_dir: Path) -> list[Path]:
         ]
     if not files:
         raise FileNotFoundError(f"no source safetensors found in {component_dir}")
+    return files
+
+
+def _source_weight_files(component_dir: Path) -> list[Path]:
+    files = source_weight_inventory(component_dir)
     missing = [str(path) for path in files if not path.is_file()]
     if missing:
         raise FileNotFoundError(f"missing source shards: {missing}")
@@ -162,6 +167,7 @@ def _new_manifest(component: str, source_files: list[Path]) -> dict[str, Any]:
         "status": "in_progress",
         "quantization": dict(QUANTIZATION),
         "source_files": [path.name for path in source_files],
+        "processed_source_files": [],
         "shards": [],
         "weight_map": {},
         "total_size": 0,
@@ -187,6 +193,10 @@ def _load_resume_manifest(
             raise FileNotFoundError(f"resume shard is missing: {shard_path}")
         if shard_path.stat().st_size != shard["bytes"] or sha256_file(shard_path) != shard["sha256"]:
             raise ValueError(f"resume shard failed integrity verification: {shard_path}")
+    if "processed_source_files" not in manifest:
+        manifest["processed_source_files"] = (
+            list(manifest["source_files"]) if manifest.get("status") == "complete" else []
+        )
     return manifest
 
 
@@ -274,12 +284,81 @@ def convert_component(
     if pending:
         _flush_shard(target_dir, pending, manifest, shard_number)
 
+    manifest["processed_source_files"] = sorted(manifest["source_files"])
     manifest["status"] = "complete"
     index = {
         "metadata": {"total_size": manifest["total_size"]},
         "weight_map": dict(sorted(manifest["weight_map"].items())),
     }
     _atomic_json(target_dir / "model.safetensors.index.json", index)
+    _atomic_json(target_dir / MANIFEST_NAME, manifest)
+    return manifest
+
+
+def convert_component_source_shard(
+    source_root: Path,
+    target_root: Path,
+    component: str,
+    source_filename: str,
+    *,
+    shard_size: int = DEFAULT_SHARD_SIZE,
+) -> dict[str, Any]:
+    """Convert one official source shard and leave a resumable component manifest."""
+    if component not in {
+        "language_model",
+        "rvq_depth_decoder",
+        "condition_encoder",
+        "transformer",
+        "vocoder",
+    }:
+        raise ValueError(f"unknown component: {component}")
+    if shard_size < 1:
+        raise ValueError("shard_size must be positive")
+    if Path(source_filename).name != source_filename:
+        raise ValueError("source_filename must be a basename")
+
+    source_dir = source_root / component
+    inventory = source_weight_inventory(source_dir)
+    inventory_names = [path.name for path in inventory]
+    if source_filename not in inventory_names:
+        raise ValueError(f"source shard is not present in the official index: {source_filename}")
+    source_file = source_dir / source_filename
+    if not source_file.is_file():
+        raise FileNotFoundError(f"source shard is not downloaded: {source_file}")
+
+    target_dir = target_root / component
+    target_dir.mkdir(parents=True, exist_ok=True)
+    manifest = _load_resume_manifest(target_dir, component, inventory)
+    if source_filename in manifest["processed_source_files"]:
+        return manifest
+    if manifest.get("status") == "complete":
+        raise ValueError("complete manifest does not record the requested source shard")
+
+    completed = set(manifest["weight_map"])
+    pending: dict[str, mx.array] = {}
+    pending_size = 0
+    shard_number = _next_shard_number(manifest)
+    for key, value in _converted_tensors(component, [source_file], completed):
+        value_size = value.nbytes
+        if pending and pending_size + value_size > shard_size:
+            _flush_shard(target_dir, pending, manifest, shard_number)
+            shard_number += 1
+            pending = {}
+            pending_size = 0
+        pending[key] = value
+        pending_size += value_size
+    if pending:
+        _flush_shard(target_dir, pending, manifest, shard_number)
+
+    manifest["processed_source_files"].append(source_filename)
+    manifest["processed_source_files"].sort()
+    if set(manifest["processed_source_files"]) == set(manifest["source_files"]):
+        manifest["status"] = "complete"
+        index = {
+            "metadata": {"total_size": manifest["total_size"]},
+            "weight_map": dict(sorted(manifest["weight_map"].items())),
+        }
+        _atomic_json(target_dir / "model.safetensors.index.json", index)
     _atomic_json(target_dir / MANIFEST_NAME, manifest)
     return manifest
 

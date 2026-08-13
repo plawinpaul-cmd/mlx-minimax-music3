@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             num_inference_steps=args.steps,
         )
-        mx.metal.reset_peak_memory()
+        mx.reset_peak_memory()
         started = time.perf_counter()
         pipeline = load_pipeline(args.model)
         result = pipeline.generate(prompt, lyrics, config)
@@ -76,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
             "frames": result.num_frames,
             "chunks": result.num_chunks,
             "wall_seconds": elapsed,
-            "peak_memory_gib": mx.metal.get_peak_memory() / 1024**3,
+            "peak_memory_gib": mx.get_peak_memory() / 1024**3,
         }
         print(json.dumps(report, indent=2))
         return 0
