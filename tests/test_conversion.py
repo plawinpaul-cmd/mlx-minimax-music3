@@ -124,6 +124,26 @@ def test_complete_conversion_resumes_without_rewriting(tmp_path) -> None:
     assert shard.stat().st_mtime_ns == before
 
 
+def test_legacy_complete_manifest_records_processed_sources_on_resume(tmp_path) -> None:
+    source_dir = tmp_path / "source" / "condition_encoder"
+    source_dir.mkdir(parents=True)
+    mx.save_safetensors(
+        source_dir / "diffusion_pytorch_model.safetensors",
+        {"proj.weight": mx.ones((2, 2, 3)), "proj.bias": mx.zeros((2,))},
+    )
+    manifest = convert_component(tmp_path / "source", tmp_path / "target", "condition_encoder")
+    manifest_path = tmp_path / "target" / "condition_encoder" / "conversion_manifest.json"
+    legacy = dict(manifest)
+    legacy.pop("processed_source_files")
+    manifest_path.write_text(json.dumps(legacy))
+
+    resumed = convert_component(tmp_path / "source", tmp_path / "target", "condition_encoder")
+    assert resumed["processed_source_files"] == ["diffusion_pytorch_model.safetensors"]
+    assert json.loads(manifest_path.read_text())["processed_source_files"] == [
+        "diffusion_pytorch_model.safetensors"
+    ]
+
+
 def test_conversion_index_covers_every_manifest_tensor(tmp_path) -> None:
     source_dir = tmp_path / "source" / "condition_encoder"
     source_dir.mkdir(parents=True)

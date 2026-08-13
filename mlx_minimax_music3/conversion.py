@@ -193,10 +193,12 @@ def _load_resume_manifest(
             raise FileNotFoundError(f"resume shard is missing: {shard_path}")
         if shard_path.stat().st_size != shard["bytes"] or sha256_file(shard_path) != shard["sha256"]:
             raise ValueError(f"resume shard failed integrity verification: {shard_path}")
-    if "processed_source_files" not in manifest:
+    migrated = "processed_source_files" not in manifest
+    if migrated:
         manifest["processed_source_files"] = (
             list(manifest["source_files"]) if manifest.get("status") == "complete" else []
         )
+        _atomic_json(path, manifest)
     return manifest
 
 
