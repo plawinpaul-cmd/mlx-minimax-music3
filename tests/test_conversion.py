@@ -11,6 +11,7 @@ from mlx_minimax_music3.conversion import (
     convert_component_source_shard,
     convert_tensor,
     convert_vocoder_weights,
+    mark_remote_verified,
 )
 from mlx_minimax_music3.language_model import LanguageModel, LanguageModelConfig
 
@@ -196,4 +197,41 @@ def test_incremental_conversion_rejects_unindexed_source(tmp_path) -> None:
     with pytest.raises(ValueError, match="official index"):
         convert_component_source_shard(
             tmp_path / "source", tmp_path / "target", "transformer", "other.safetensors"
+        )
+
+
+def test_remotely_verified_shard_can_be_removed_and_resumed(tmp_path) -> None:
+    source_dir = tmp_path / "source" / "condition_encoder"
+    source_dir.mkdir(parents=True)
+    mx.save_safetensors(
+        source_dir / "diffusion_pytorch_model.safetensors",
+        {"proj.weight": mx.ones((2, 2, 3)), "proj.bias": mx.zeros((2,))},
+    )
+    manifest = convert_component(tmp_path / "source", tmp_path / "target", "condition_encoder")
+    component_dir = tmp_path / "target" / "condition_encoder"
+    shard = manifest["shards"][0]
+    marked = mark_remote_verified(component_dir, shard["file"], shard["sha256"], "abc123")
+    assert marked["shards"][0]["remote_verified"] is True
+    (component_dir / shard["file"]).unlink()
+
+    resumed = convert_component(tmp_path / "source", tmp_path / "target", "condition_encoder")
+    assert resumed["status"] == "complete"
+    assert not (component_dir / shard["file"]).exists()
+
+
+def test_remote_verification_rejects_wrong_hash(tmp_path) -> None:
+    source_dir = tmp_path / "source" / "condition_encoder"
+    source_dir.mkdir(parents=True)
+    mx.save_safetensors(
+        source_dir / "diffusion_pytorch_model.safetensors",
+        {"proj.weight": mx.ones((2, 2, 3)), "proj.bias": mx.zeros((2,))},
+    )
+    manifest = convert_component(tmp_path / "source", tmp_path / "target", "condition_encoder")
+    shard = manifest["shards"][0]
+    with pytest.raises(ValueError, match="does not match"):
+        mark_remote_verified(
+            tmp_path / "target" / "condition_encoder",
+            shard["file"],
+            "0" * 64,
+            "abc123",
         )

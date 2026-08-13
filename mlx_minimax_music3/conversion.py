@@ -189,10 +189,17 @@ def _load_resume_manifest(
             raise ValueError(f"resume manifest field {field!r} does not match this conversion")
     for shard in manifest.get("shards", []):
         shard_path = target_dir / shard["file"]
-        if not shard_path.is_file():
-            raise FileNotFoundError(f"resume shard is missing: {shard_path}")
-        if shard_path.stat().st_size != shard["bytes"] or sha256_file(shard_path) != shard["sha256"]:
-            raise ValueError(f"resume shard failed integrity verification: {shard_path}")
+        if shard_path.is_file():
+            if (
+                shard_path.stat().st_size != shard["bytes"]
+                or sha256_file(shard_path) != shard["sha256"]
+            ):
+                raise ValueError(f"resume shard failed integrity verification: {shard_path}")
+        elif not (
+            shard.get("remote_verified") is True
+            and shard.get("remote_sha256") == shard["sha256"]
+        ):
+            raise FileNotFoundError(f"resume shard is missing and not remotely verified: {shard_path}")
     migrated = "processed_source_files" not in manifest
     if migrated:
         manifest["processed_source_files"] = (
@@ -200,6 +207,27 @@ def _load_resume_manifest(
         )
         _atomic_json(path, manifest)
     return manifest
+
+
+def mark_remote_verified(
+    component_dir: Path,
+    filename: str,
+    remote_sha256: str,
+    remote_revision: str,
+) -> dict[str, Any]:
+    manifest_path = component_dir / MANIFEST_NAME
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for shard in manifest.get("shards", []):
+        if shard["file"] != filename:
+            continue
+        if remote_sha256 != shard["sha256"]:
+            raise ValueError(f"remote SHA-256 does not match conversion manifest: {filename}")
+        shard["remote_verified"] = True
+        shard["remote_sha256"] = remote_sha256
+        shard["remote_revision"] = remote_revision
+        _atomic_json(manifest_path, manifest)
+        return manifest
+    raise ValueError(f"output shard is not present in conversion manifest: {filename}")
 
 
 def _next_shard_number(manifest: Mapping[str, Any]) -> int:
