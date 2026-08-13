@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mlx-minimax-music3"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Native Apple MLX inference for MiniMax Music 3"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -24,6 +24,11 @@ dependencies = [
 server = ["fastapi>=0.128,<1", "uvicorn>=0.40,<1"]
 test = ["pytest>=9,<10"]
 
+[project.urls]
+Homepage = "https://github.com/vanch007/mlx-minimax-music3"
+Repository = "https://github.com/vanch007/mlx-minimax-music3"
+Model = "https://huggingface.co/vanch007/MiniMax-Music3-MLX-8bit"
+
 [project.scripts]
 mlx-minimax-music3 = "mlx_minimax_music3.cli:main"
 
@@ -33,4 +38,3 @@ packages = ["mlx_minimax_music3"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
-

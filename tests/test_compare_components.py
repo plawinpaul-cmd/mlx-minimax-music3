@@ -70,6 +70,7 @@ def test_compare_preserves_reference_virtualenv_entrypoint(tmp_path, monkeypatch
         reference_revision="locked-revision",
         component="all",
         checkpoint_revision="checkpoint",
+        checkpoint_id=None,
         source_repo="source/model",
         source_revision="source-revision",
         reference_device="cpu",

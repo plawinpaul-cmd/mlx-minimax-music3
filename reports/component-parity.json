@@ -1,5 +1,5 @@
 {
-  "checkpoint": "/Users/vanch/mlx-minimax-music3/models/MiniMax-Music3-MLX-8bit",
+  "checkpoint": "vanch007/MiniMax-Music3-MLX-8bit",
   "checkpoint_revision": "cdbfd0ea10ad8952d58fc7ae87d01b282b55b243",
   "components": {
     "condition_encoder": {

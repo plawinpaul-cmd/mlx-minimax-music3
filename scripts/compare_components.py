@@ -358,7 +358,7 @@ def compare(args: argparse.Namespace) -> dict:
     report = {
         "format": "mlx-minimax-music3-component-parity-v1",
         "status": "in_progress",
-        "checkpoint": str(model_path),
+        "checkpoint": getattr(args, "checkpoint_id", None) or str(model_path),
         "checkpoint_revision": args.checkpoint_revision,
         "source_model": args.source_repo,
         "source_revision": args.source_revision,
@@ -456,6 +456,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-revision", default=DEFAULT_SOURCE_REVISION)
     parser.add_argument("--reference-revision", default=DEFAULT_REFERENCE_REVISION)
     parser.add_argument("--checkpoint-revision", required=False, default="local")
+    parser.add_argument("--checkpoint-id")
     parser.add_argument("--reference-device", choices=("cpu", "mps"), default="mps")
     parser.add_argument("--report", type=Path, default=Path("reports/component-parity.json"))
     parser.add_argument("--seed", type=int, default=7)

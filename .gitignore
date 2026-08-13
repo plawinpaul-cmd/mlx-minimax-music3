@@ -11,3 +11,4 @@ outputs/
 reports/*.json
 reports/*.wav
 !reports/component-parity.json
+!reports/release-validation.json

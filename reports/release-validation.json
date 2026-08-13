@@ -1,0 +1,89 @@
+{
+  "format": "mlx-minimax-music3-release-validation-v1",
+  "status": "local_validation_passed",
+  "date": "2026-08-14",
+  "runtime": {
+    "repository": "vanch007/mlx-minimax-music3",
+    "revision": "v0.1.0",
+    "version": "0.1.0",
+    "production_uses_pytorch": false
+  },
+  "checkpoint": {
+    "repository": "vanch007/MiniMax-Music3-MLX-8bit",
+    "weights_revision": "cdbfd0ea10ad8952d58fc7ae87d01b282b55b243",
+    "weight_bytes": 14167660156,
+    "weight_shards": 12,
+    "mlx_tensors": 1978,
+    "integrity_status": "pass"
+  },
+  "environment": {
+    "hardware": "Apple M3 Max",
+    "cpu_cores": 16,
+    "unified_memory_gib": 128,
+    "os": "macOS 27.0 (26A5406e)",
+    "architecture": "arm64",
+    "python": "3.12.13",
+    "mlx": "0.31.2",
+    "mlx_lm": "0.31.3",
+    "metal_available": true
+  },
+  "automated_tests": {
+    "status": "pass",
+    "passed": 91,
+    "warnings": 1,
+    "warning_note": "Upstream Starlette TestClient deprecation warning"
+  },
+  "component_parity": {
+    "status": "pass",
+    "report": "reports/component-parity.json",
+    "source_precision": "BF16",
+    "release_precision": "selective affine 8-bit group-size 64 with BF16 exceptions"
+  },
+  "generation": {
+    "status": "pass",
+    "requested_seconds": 10.0,
+    "actual_seconds": 9.996190476190476,
+    "autoregressive_frames": 250,
+    "chunks": 2,
+    "flow_steps_per_chunk": 30,
+    "seed": 7,
+    "wall_seconds": 69.17973712499952,
+    "peak_mlx_memory_gib": 23.338177163153887,
+    "sample_rate": 44100,
+    "channels": 2,
+    "sample_format": "PCM S16LE",
+    "samples": 440832,
+    "finite": true,
+    "peak": 0.458160400390625,
+    "clipped_fraction": 0.0,
+    "rms_left": 0.07045618444681168,
+    "rms_right": 0.07226338982582092,
+    "stereo_difference_rms": 0.05208740755915642,
+    "channel_correlation": 0.7337906259060953,
+    "seam_time_seconds": 5.00390022675737,
+    "seam_jump": 0.0001220703125,
+    "output_sha256": "8dba7104caf678b6a0484e6861e202904d5ccbbea3882b2f4350a786939b6316"
+  },
+  "http_service": {
+    "status": "pass",
+    "health_status": 200,
+    "speech_status": 200,
+    "speech_sample_rate": 44100,
+    "speech_channels": 2,
+    "speech_finite": true,
+    "speech_non_silent": true
+  },
+  "package": {
+    "status": "pass",
+    "artifact": "mlx_minimax_music3-0.1.0-py3-none-any.whl"
+  },
+  "listening_review": {
+    "status": "pending",
+    "note": "Automated waveform and spectrum checks do not substitute for human listening."
+  },
+  "publication": {
+    "github_public": "pending",
+    "hugging_face_public": "pending",
+    "fresh_public_environment_smoke": "pending"
+  }
+}

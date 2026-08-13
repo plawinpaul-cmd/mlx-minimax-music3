@@ -3,7 +3,7 @@
 from .config import GenerationConfig, ModelConfig
 
 __all__ = ["GenerationConfig", "ModelConfig", "generate", "load_model"]
-__version__ = "0.1.0.dev0"
+__version__ = "0.1.0"
 
 
 def load_model(model):
