@@ -37,6 +37,21 @@ def test_semantic_guidance_applies_top_k_and_vocab_mask() -> None:
     assert np.isneginf(values[0, 0])
     assert values[0, 1] == pytest.approx(6.0)
     assert np.isneginf(values[0, 2])
+    assert values[0, 3] == pytest.approx(3.0)
+
+
+def test_semantic_top_k_is_computed_after_vocab_mask() -> None:
+    # Disallowed text logits are larger than every audio logit. They must not
+    # consume the conditional top-k budget.
+    logits = mx.array([[100.0, 90.0, 3.0, 2.0], [0.0, 0.0, 0.0, 0.0]])
+    allowed = mx.array([False, False, True, True])
+    guided = semantic_guided_logits(logits, allowed, conditional_top_k=1)
+    mx.eval(guided)
+
+    values = np.asarray(guided)
+    assert np.isneginf(values[0, 0])
+    assert np.isneginf(values[0, 1])
+    assert values[0, 2] == pytest.approx(4.5)
     assert np.isneginf(values[0, 3])
 
 

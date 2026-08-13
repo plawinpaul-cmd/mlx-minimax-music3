@@ -47,8 +47,8 @@ def semantic_guided_logits(
     values = _finite_logits(logits)
     conditional, unconditional = values[0:1], values[1:2]
     guided = unconditional + (conditional - unconditional) * cfg_scale
+    conditional = mx.where(allowed_vocab[None, :], conditional, -mx.inf)
     k = min(conditional_top_k, conditional.shape[-1])
     threshold = mx.min(mx.topk(conditional, k, axis=-1), axis=-1, keepdims=True)
     keep = (conditional >= threshold) & allowed_vocab[None, :]
     return mx.where(keep, guided, -mx.inf)
-
