@@ -98,10 +98,8 @@ def main() -> int:
     source_root = args.source_root.expanduser().resolve()
     output_root = args.output.expanduser().resolve()
     prepare_checkpoint_layout(source_root, output_root)
-    inventory = source_weight_inventory(source_root / args.component)
-    inventory_names = {path.name for path in inventory}
-    if args.source_shard not in inventory_names:
-        raise ValueError(f"source shard is not listed in the official index: {args.source_shard}")
+    if Path(args.source_shard).name != args.source_shard:
+        raise ValueError("--source-shard must be a basename")
 
     source_path = Path(
         hf_hub_download(
@@ -111,6 +109,10 @@ def main() -> int:
             local_dir=source_root,
         )
     )
+    inventory = source_weight_inventory(source_root / args.component)
+    inventory_names = {path.name for path in inventory}
+    if args.source_shard not in inventory_names:
+        raise ValueError(f"source shard is not listed in the official component inventory: {args.source_shard}")
     manifest = convert_component_source_shard(
         source_root,
         output_root,
