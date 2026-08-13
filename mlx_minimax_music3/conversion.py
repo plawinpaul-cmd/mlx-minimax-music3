@@ -9,7 +9,13 @@ from typing import Any
 
 import mlx.core as mx
 
-from .checkpoint import CHECKPOINT_FORMAT, QUANTIZATION, is_quantized_path
+from .checkpoint import (
+    CHECKPOINT_FORMAT,
+    COMPONENTS,
+    QUANTIZATION,
+    is_quantized_path,
+    read_checkpoint_config,
+)
 from .vocoder import (
     fold_weight_norm,
     pytorch_conv1d_to_mlx,
@@ -276,3 +282,64 @@ def convert_component(
     _atomic_json(target_dir / "model.safetensors.index.json", index)
     _atomic_json(target_dir / MANIFEST_NAME, manifest)
     return manifest
+
+
+def audit_checkpoint(model_path: Path, *, load_tensors: bool = True) -> dict[str, Any]:
+    model_path = model_path.expanduser().resolve()
+    read_checkpoint_config(model_path)
+    if not (model_path / "tokenizer" / "tokenizer.json").is_file():
+        raise FileNotFoundError("checkpoint tokenizer/tokenizer.json is missing")
+
+    report: dict[str, Any] = {
+        "format": CHECKPOINT_FORMAT,
+        "status": "pass",
+        "components": {},
+        "total_bytes": 0,
+        "total_tensors": 0,
+    }
+    for component in COMPONENTS:
+        component_dir = model_path / component
+        manifest_path = component_dir / MANIFEST_NAME
+        if not manifest_path.is_file():
+            raise FileNotFoundError(f"component manifest is missing: {manifest_path}")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("status") != "complete":
+            raise ValueError(f"component {component} is not complete")
+        if manifest.get("component") != component or manifest.get("format") != CHECKPOINT_FORMAT:
+            raise ValueError(f"component manifest identity mismatch: {component}")
+
+        index_path = component_dir / "model.safetensors.index.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        if index.get("weight_map") != dict(sorted(manifest["weight_map"].items())):
+            raise ValueError(f"component index does not match manifest: {component}")
+
+        component_bytes = 0
+        component_tensors = 0
+        for shard in manifest["shards"]:
+            path = component_dir / shard["file"]
+            if not path.is_file():
+                raise FileNotFoundError(f"checkpoint shard is missing: {path}")
+            size = path.stat().st_size
+            if size != shard["bytes"] or sha256_file(path) != shard["sha256"]:
+                raise ValueError(f"checkpoint shard failed integrity verification: {path}")
+            if load_tensors:
+                arrays = mx.load(path)
+                if set(arrays) != set(shard["tensors"]):
+                    raise ValueError(f"checkpoint shard tensor list mismatch: {path}")
+                finite = [mx.all(mx.isfinite(value)) for value in arrays.values() if value.dtype != mx.uint32]
+                if finite:
+                    mx.eval(finite)
+                    if not all(item.item() for item in finite):
+                        raise ValueError(f"checkpoint shard contains non-finite tensors: {path}")
+            component_bytes += size
+            component_tensors += len(shard["tensors"])
+
+        report["components"][component] = {
+            "status": "pass",
+            "bytes": component_bytes,
+            "tensors": component_tensors,
+            "shards": len(manifest["shards"]),
+        }
+        report["total_bytes"] += component_bytes
+        report["total_tensors"] += component_tensors
+    return report
