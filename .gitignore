@@ -10,4 +10,4 @@ models/
 outputs/
 reports/*.json
 reports/*.wav
-
+!reports/component-parity.json

@@ -1,0 +1,240 @@
+{
+  "checkpoint": "/Users/vanch/mlx-minimax-music3/models/MiniMax-Music3-MLX-8bit",
+  "checkpoint_revision": "cdbfd0ea10ad8952d58fc7ae87d01b282b55b243",
+  "components": {
+    "condition_encoder": {
+      "input_shapes": {
+        "hidden_states": [
+          1,
+          3,
+          32768
+        ]
+      },
+      "metrics": {
+        "cosine_similarity": 0.9999898855105444,
+        "finite": true,
+        "max_abs_error": 0.0009765625,
+        "mean_abs_error": 0.00011017743090633303,
+        "reference_rms": 0.03639298307062041,
+        "relative_rmse": 0.004653878250265355,
+        "rmse": 0.0001693685123746356,
+        "shape": [
+          1,
+          10,
+          2048
+        ]
+      },
+      "mlx": {
+        "backend": "mlx",
+        "device": "metal",
+        "peak_memory_gib": 0.047226035967469215,
+        "seconds": 0.03277075000369223
+      },
+      "reference": {
+        "backend": "pytorch-reference",
+        "device": "mps",
+        "seconds": 14.123316999997769,
+        "source_shards": [
+          "diffusion_pytorch_model.safetensors"
+        ],
+        "source_tensors": 4
+      },
+      "status": "pass",
+      "thresholds": {
+        "max_relative_rmse": 0.05,
+        "min_cosine": 0.999
+      }
+    },
+    "language_model": {
+      "input_shapes": {
+        "input_ids": [
+          1,
+          4
+        ]
+      },
+      "metrics": {
+        "cosine_similarity": 0.9998223534905033,
+        "finite": true,
+        "max_abs_error": 1.625,
+        "mean_abs_error": 0.34350426003821194,
+        "reference_rms": 16.68341933636149,
+        "relative_rmse": 0.025000682662987363,
+        "rmse": 0.4170968725619208,
+        "shape": [
+          1,
+          4,
+          200000
+        ]
+      },
+      "mlx": {
+        "backend": "mlx",
+        "device": "metal",
+        "peak_memory_gib": 9.933977201581001,
+        "seconds": 1.8163295830017887
+      },
+      "reference": {
+        "backend": "pytorch-reference",
+        "device": "mps",
+        "seconds": 1096.8216632090043,
+        "source_shards": [
+          "model-00001-of-00004.safetensors",
+          "model-00002-of-00004.safetensors",
+          "model-00003-of-00004.safetensors",
+          "model-00004-of-00004.safetensors"
+        ],
+        "source_tensors": 399
+      },
+      "status": "pass",
+      "thresholds": {
+        "max_relative_rmse": 0.3,
+        "min_cosine": 0.98
+      }
+    },
+    "rvq_depth_decoder": {
+      "input_shapes": {
+        "inputs_embeds": [
+          2,
+          3,
+          4096
+        ]
+      },
+      "metrics": {
+        "cosine_similarity": 0.9999160723845794,
+        "finite": true,
+        "max_abs_error": 0.078125,
+        "mean_abs_error": 0.00799282807080696,
+        "reference_rms": 0.8450772153317175,
+        "relative_rmse": 0.012955710337353151,
+        "rmse": 0.010948575614534748,
+        "shape": [
+          2,
+          3,
+          4096
+        ]
+      },
+      "mlx": {
+        "backend": "mlx",
+        "device": "metal",
+        "peak_memory_gib": 0.7080612368881702,
+        "seconds": 0.14239529200131074
+      },
+      "reference": {
+        "backend": "pytorch-reference",
+        "device": "mps",
+        "seconds": 88.17429433299549,
+        "source_shards": [
+          "diffusion_pytorch_model.safetensors"
+        ],
+        "source_tensors": 47
+      },
+      "status": "pass",
+      "thresholds": {
+        "max_relative_rmse": 0.2,
+        "min_cosine": 0.99
+      }
+    },
+    "transformer": {
+      "input_shapes": {
+        "encoder_hidden_states": [
+          1,
+          5,
+          2048
+        ],
+        "hidden_states": [
+          1,
+          5,
+          128
+        ],
+        "timestep": [
+          1
+        ]
+      },
+      "metrics": {
+        "cosine_similarity": 0.9989898918759872,
+        "finite": true,
+        "max_abs_error": 0.0625,
+        "mean_abs_error": 0.015019416809082031,
+        "reference_rms": 0.4421040201747594,
+        "relative_rmse": 0.04507084583360508,
+        "rmse": 0.019926002135713612,
+        "shape": [
+          1,
+          5,
+          128
+        ]
+      },
+      "mlx": {
+        "backend": "mlx",
+        "device": "metal",
+        "peak_memory_gib": 2.426869161427021,
+        "seconds": 0.5872688750096131
+      },
+      "reference": {
+        "backend": "pytorch-reference",
+        "device": "mps",
+        "seconds": 643.9032296669975,
+        "source_shards": [
+          "diffusion_pytorch_model-00001-of-00002.safetensors",
+          "diffusion_pytorch_model-00002-of-00002.safetensors"
+        ],
+        "source_tensors": 441
+      },
+      "status": "pass",
+      "thresholds": {
+        "max_relative_rmse": 0.3,
+        "min_cosine": 0.98
+      }
+    },
+    "vocoder": {
+      "input_shapes": {
+        "latents": [
+          1,
+          4,
+          128
+        ]
+      },
+      "metrics": {
+        "cosine_similarity": 0.9998766790375745,
+        "finite": true,
+        "max_abs_error": 0.0048828125,
+        "mean_abs_error": 0.0009322044206783175,
+        "reference_rms": 0.07586748162969022,
+        "relative_rmse": 0.015715292058727362,
+        "rmse": 0.0011922796315707146,
+        "shape": [
+          1,
+          2,
+          2048
+        ]
+      },
+      "mlx": {
+        "backend": "mlx",
+        "device": "metal",
+        "peak_memory_gib": 0.17195272259414196,
+        "seconds": 0.06824775000131922
+      },
+      "reference": {
+        "backend": "pytorch-reference",
+        "device": "mps",
+        "seconds": 23.98856133299705,
+        "source_shards": [
+          "diffusion_pytorch_model.safetensors"
+        ],
+        "source_tensors": 121
+      },
+      "status": "pass",
+      "thresholds": {
+        "max_relative_rmse": 0.15,
+        "min_cosine": 0.995
+      }
+    }
+  },
+  "format": "mlx-minimax-music3-component-parity-v1",
+  "reference_implementation": "huggingface/diffusers",
+  "reference_precision": "BF16",
+  "reference_revision": "c6da9936e4bda83107943a16eb8682e9a37d8527",
+  "release_precision": "selective affine 8-bit group-size 64 with BF16 exceptions",
+  "source_model": "MiniMaxAI/MiniMax-Music3",
+  "source_revision": "c2509fd6b60d1ae169cd1df27f78a53174ba17e8",
+  "status": "pass"
+}
