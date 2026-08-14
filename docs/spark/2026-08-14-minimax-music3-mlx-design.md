@@ -1,7 +1,7 @@
 # MiniMax Music 3 Native MLX Port Design
 
 - Date: 2026-08-14
-- Status: approved, implemented, and locally validated; public release audit pending
+- Status: approved, implemented, validated, and published
 - Owner: vanch007
 - Source code: https://github.com/MiniMax-AI/MiniMax-Music3
 - Source model: https://huggingface.co/MiniMaxAI/MiniMax-Music3
@@ -278,10 +278,10 @@ These exclusions do not narrow the requested local MLX deployment, conversion, a
 | Requirement | Required evidence | Current status |
 |---|---|---|
 | Native MLX project | Production dependency/runtime audit and successful Metal generation | pass |
-| Converted MLX model | Complete manifest, shard audit, and public HF resolution | local and private-remote audit pass; public resolution pending |
+| Converted MLX model | Complete manifest, shard audit, and public HF resolution | pass |
 | Local deployment | Reproducible local command and valid generated WAV | pass |
 | MLX adaptation | Component parity plus pipeline and API tests | pass |
-| GitHub publication | Public repository, tag, and remote file inspection | pending |
-| Hugging Face publication | Public model repository and fresh-cache generation | pending |
+| GitHub publication | Public repository, tag, and remote file inspection | pass |
+| Hugging Face publication | Public model repository and fresh-cache generation | pass |
 
 The project is complete only when every row is supported by current retained evidence. A passing narrow unit test or successful upload alone is insufficient.

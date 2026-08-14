@@ -1,6 +1,6 @@
 {
   "format": "mlx-minimax-music3-release-validation-v1",
-  "status": "local_validation_passed",
+  "status": "pass",
   "date": "2026-08-14",
   "runtime": {
     "repository": "vanch007/mlx-minimax-music3",
@@ -82,8 +82,20 @@
     "note": "Automated waveform and spectrum checks do not substitute for human listening."
   },
   "publication": {
-    "github_public": "pending",
-    "hugging_face_public": "pending",
-    "fresh_public_environment_smoke": "pending"
+    "github_public": "pass",
+    "hugging_face_public": "pass",
+    "anonymous_public_resolution": "pass",
+    "fresh_public_environment_smoke": "pass",
+    "public_github_revision": "eafa8d96f0bb2f0c6340a57c9b2a693f98b84c49",
+    "public_model_revision": "a281c459d9354bf267484be0ba3604f79d0288a0",
+    "fresh_python": "3.12.10",
+    "fresh_package_version": "0.1.0",
+    "fresh_torch_installed": false,
+    "fresh_checkpoint_audit": "pass",
+    "fresh_smoke_wav_sha256": "109346afbeaac6dc89d88bacdc75f0c06b65377de12f1a3e1eec6f1b5816e648",
+    "fresh_smoke_sample_rate": 44100,
+    "fresh_smoke_channels": 2,
+    "fresh_smoke_finite": true,
+    "fresh_smoke_non_silent": true
   }
 }
