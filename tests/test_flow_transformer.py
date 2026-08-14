@@ -55,6 +55,15 @@ def test_rotary_frequency_zero_position_is_identity() -> None:
     np.testing.assert_array_equal(np.asarray(sin[0]), np.zeros(4))
 
 
+def test_rotary_frequencies_are_cached_by_shape() -> None:
+    rotary_frequencies.cache_clear()
+    first = rotary_frequencies(7, 4)
+    second = rotary_frequencies(7, 4)
+
+    assert first[0] is second[0]
+    assert rotary_frequencies.cache_info().hits == 1
+
+
 def test_flow_transformer_shape_and_finite_output() -> None:
     mx.random.seed(5)
     model = FlowTransformer(tiny_config())

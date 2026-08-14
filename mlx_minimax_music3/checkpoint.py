@@ -10,7 +10,7 @@ import mlx.nn as nn
 from huggingface_hub import snapshot_download
 
 from .condition_encoder import ConditionEncoder, ConditionEncoderConfig
-from .config import ModelConfig
+from .config import ModelConfig, OptimizationConfig
 from .flow_transformer import FlowTransformer, FlowTransformerConfig
 from .language_model import LanguageModel, LanguageModelConfig
 from .pipeline import MiniMaxMusic3Pipeline, PipelineComponents
@@ -184,16 +184,27 @@ def resolve_model_path(model: str | Path) -> Path:
     return Path(snapshot_download(str(model)))
 
 
-def load_pipeline(model: str | Path) -> MiniMaxMusic3Pipeline:
+def load_pipeline(
+    model: str | Path,
+    optimization_config: OptimizationConfig | None = None,
+) -> MiniMaxMusic3Pipeline:
     model_path = resolve_model_path(model)
     config = read_checkpoint_config(model_path)
     components = config["components"]
+    model_config = ModelConfig(**config["model"])
+    optimization_config = optimization_config or OptimizationConfig.from_env()
 
     language = load_component(
         "language_model",
         LanguageModel(LanguageModelConfig.from_dict(components["language_model"])),
         model_path,
     )
+    if optimization_config.pruned_semantic_head:
+        language.prepare_semantic_head(
+            model_config.audio_code_offset,
+            model_config.semantic_vocab_size,
+            model_config.audio_end_token_id,
+        )
     rvq = load_component(
         "rvq_depth_decoder",
         RVQDepthDecoder(RVQDecoderConfig(**components["rvq_depth_decoder"])),
@@ -227,6 +238,6 @@ def load_pipeline(model: str | Path) -> MiniMaxMusic3Pipeline:
             transformer=transformer,
             vocoder=vocoder,
         ),
-        model_config=ModelConfig(**config["model"]),
+        model_config=model_config,
+        optimization_config=optimization_config,
     )
-

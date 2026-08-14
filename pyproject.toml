@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mlx-minimax-music3"
-version = "0.1.0"
+version = "0.2.0"
 description = "Native Apple MLX inference for MiniMax Music 3"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"

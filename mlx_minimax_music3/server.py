@@ -28,7 +28,7 @@ def create_app(
     *,
     pipeline_loader: Callable = load_pipeline,
 ) -> FastAPI:
-    app = FastAPI(title="MiniMax Music 3 MLX", version="0.1.0")
+    app = FastAPI(title="MiniMax Music 3 MLX", version="0.2.0")
     state: dict[str, object] = {}
     load_lock = threading.Lock()
     generation_lock = threading.Lock()
@@ -69,4 +69,3 @@ def create_app(
         )
 
     return app
-

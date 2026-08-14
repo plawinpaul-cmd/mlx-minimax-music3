@@ -52,3 +52,30 @@ def test_hidden_state_api_requires_exactly_one_input() -> None:
     with pytest.raises(ValueError):
         model.hidden_states(mx.array([[1]]), input_embeddings=mx.zeros((1, 1, 8)))
 
+
+def test_pruned_semantic_head_matches_selected_full_logits() -> None:
+    mx.random.seed(17)
+    model = LanguageModel(tiny_config())
+    hidden = mx.random.normal((2, 8))
+    full_logits = model.logits(hidden)
+    expected = mx.concatenate((full_logits[:, 12:17], full_logits[:, 3:4]), axis=-1)
+
+    model.prepare_semantic_head(
+        audio_code_offset=12,
+        semantic_vocab_size=5,
+        audio_end_token_id=3,
+    )
+    compact_logits = model.logits(hidden)
+    mx.eval(expected, compact_logits)
+
+    assert model.semantic_head_layout == (12, 5, 3)
+    assert model.lm_head is None
+    np.testing.assert_array_equal(np.asarray(compact_logits), np.asarray(expected))
+
+
+def test_pruned_semantic_head_rejects_layout_change() -> None:
+    model = LanguageModel(tiny_config())
+    model.prepare_semantic_head(12, 5, 3)
+
+    with pytest.raises(ValueError, match="different layout"):
+        model.prepare_semantic_head(13, 5, 3)

@@ -1,0 +1,105 @@
+{
+  "format": "mlx-minimax-music3-performance-optimization-v1",
+  "status": "pass_controlled_components",
+  "date": "2026-08-14",
+  "runtime": {
+    "hardware": "Apple M3 Max, 128 GB unified memory",
+    "macos": "27.0",
+    "mlx": "0.31.2",
+    "mlx_lm": "0.31.3",
+    "power": "AC"
+  },
+  "implementation": {
+    "pruned_semantic_head": "default_on",
+    "depth_kv_cache": "default_on",
+    "batched_dit_cfg": "default_on",
+    "rotary_frequency_cache": "default_on",
+    "compiled_dit": "adaptive_at_sequence_length_lte_384_and_steps_gte_12"
+  },
+  "controlled_results": {
+    "semantic_head": {
+      "retained_logits": 16385,
+      "max_abs_difference": 0.0,
+      "mean_abs_difference": 0.0,
+      "top50_set_overlap": 50,
+      "active_memory_before_gib": 13.267791274935007,
+      "active_memory_after_gib": 11.86595106497407
+    },
+    "depth_kv_cache_single_frame": {
+      "top_k": 1,
+      "codes_equal": true,
+      "uncached_median_seconds": 0.11311245799879543,
+      "cached_median_seconds": 0.054512604503543116,
+      "cached_over_uncached": 0.4819328080035502,
+      "hidden_max_abs_difference": 0.125,
+      "hidden_mean_abs_difference": 0.0023900887463241816
+    },
+    "batched_dit_cfg": {
+      "separate_median_seconds": 2.8095599170046626,
+      "batched_median_seconds": 2.6629140419972828,
+      "batched_over_separate": 0.9478046813951836,
+      "max_abs_output_difference": 0.00002574920654296875,
+      "mean_abs_output_difference": 0.000001551775426378299
+    },
+    "compiled_dit": {
+      "sequence_length_310": {
+        "eager_median_seconds": 0.8903973959968425,
+        "compiled_median_seconds": 0.8257537919998867,
+        "compiled_over_eager": 0.9273991542567528,
+        "first_compiled_call_seconds": 0.9622884160053218
+      },
+      "sequence_length_689": {
+        "eager_median_seconds": 2.0887580005000927,
+        "compiled_median_seconds": 2.175662374997046,
+        "compiled_over_eager": 1.0416057649934298,
+        "first_compiled_call_seconds": 7.348854875002871
+      }
+    }
+  },
+  "provisional_end_to_end": {
+    "status": "variable_host_load_not_release_baseline",
+    "duration_seconds": 10.0,
+    "inference_steps": 30,
+    "prompt_tokens": 69,
+    "compatibility_generation_seconds": 155.29140699897835,
+    "optimized_generation_seconds_before_adaptive_compile": 117.6224949160096,
+    "compatibility_ar_seconds": 46.53248495799198,
+    "optimized_ar_seconds": 23.427301000003354,
+    "compatibility_dit_seconds": 106.57963812499656,
+    "optimized_dit_seconds": 90.86717875000613,
+    "compatibility_peak_memory_gib": 23.338527645915747,
+    "optimized_peak_memory_gib": 22.029984455555677,
+    "clean_host_rerun": "pending"
+  },
+  "verification": {
+    "automated_tests": 101,
+    "tests_status": "pass",
+    "compileall_status": "pass",
+    "git_diff_check_status": "pass",
+    "checkpoint_metadata_audit": {
+      "status": "pass",
+      "shards": 12,
+      "tensors": 1978,
+      "bytes": 14167660156
+    },
+    "local_service": {
+      "status": "pass",
+      "url": "http://127.0.0.1:8001",
+      "launch_agent": "com.vanch.mlx-minimax-music3",
+      "first_request_seconds": 30.313458,
+      "warm_request_seconds": 22.846976,
+      "requested_frames": 25,
+      "audio_duration_seconds": 0.9984580498866213,
+      "fixed_seed_sha256_match": true,
+      "sha256": "8b01503955a4a7edee880d5b56686ba28c8119c4a9a14a0b93bd03ef27f91df4"
+    },
+    "optimized_wav": {
+      "status": "pass",
+      "sampling_rate": 44100,
+      "channels": 2,
+      "samples_per_channel": 440832,
+      "duration_seconds": 9.996190476190476
+    },
+    "human_listening_review": "pending"
+  }
+}

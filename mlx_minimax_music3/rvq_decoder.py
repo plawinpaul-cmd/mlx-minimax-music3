@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import mlx.core as mx
 import mlx.nn as nn
+from mlx_lm.models.cache import KVCache
 
 from .config import ModelConfig
 from .language_model import LanguageModel
@@ -35,12 +37,26 @@ class DepthAttention(nn.Module):
         self.to_v = nn.Linear(hidden_size, hidden_size, bias=False)
         self.to_out = nn.Linear(hidden_size, hidden_size, bias=False)
 
-    def __call__(self, hidden_states: mx.array) -> mx.array:
+    def __call__(
+        self,
+        hidden_states: mx.array,
+        cache: KVCache | None = None,
+    ) -> mx.array:
         batch, length, hidden_size = hidden_states.shape
         shape = (batch, length, self.num_heads, self.head_dim)
         query = self.to_q(hidden_states).reshape(shape).transpose(0, 2, 1, 3)
         key = self.to_k(hidden_states).reshape(shape).transpose(0, 2, 1, 3)
         value = self.to_v(hidden_states).reshape(shape).transpose(0, 2, 1, 3)
+        mask: str | mx.array | None = "causal"
+        if cache is not None:
+            offset = cache.offset
+            key, value = cache.update_and_fetch(key, value)
+            if length == 1:
+                mask = None
+            else:
+                query_positions = mx.arange(offset, offset + length)[:, None]
+                key_positions = mx.arange(offset + length)[None, :]
+                mask = query_positions >= key_positions
         output = mx.fast.scaled_dot_product_attention(
             query,
             key,
@@ -63,8 +79,15 @@ class RVQDecoderBlock(nn.Module):
         self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
-    def __call__(self, hidden_states: mx.array) -> mx.array:
-        hidden_states = hidden_states + self.attn(self.input_layernorm(hidden_states))
+    def __call__(
+        self,
+        hidden_states: mx.array,
+        cache: KVCache | None = None,
+    ) -> mx.array:
+        hidden_states = hidden_states + self.attn(
+            self.input_layernorm(hidden_states),
+            cache=cache,
+        )
         normalized = self.post_attention_layernorm(hidden_states)
         gated = nn.silu(self.gate_proj(normalized)) * self.up_proj(normalized)
         return hidden_states + self.down_proj(gated)
@@ -87,19 +110,37 @@ class RVQDepthDecoder(nn.Module):
             for _ in range(self.config.num_codebooks - 1)
         ]
 
-    def __call__(self, inputs_embeds: mx.array) -> mx.array:
+    def __call__(
+        self,
+        inputs_embeds: mx.array,
+        cache: list[KVCache] | None = None,
+    ) -> mx.array:
         if inputs_embeds.ndim != 3 or inputs_embeds.shape[-1] != self.config.hidden_size:
             raise ValueError(
                 f"inputs_embeds must have shape [batch, length, {self.config.hidden_size}]"
             )
+        if cache is not None and len(cache) != len(self.layers):
+            raise ValueError("depth cache must contain one entry per decoder layer")
+        offsets = {entry.offset for entry in cache} if cache is not None else {0}
+        if len(offsets) != 1:
+            raise ValueError("depth cache layer offsets must match")
+        offset = offsets.pop()
         length = inputs_embeds.shape[1]
-        if length > self.config.max_position_embeddings:
+        if offset + length > self.config.max_position_embeddings:
             raise ValueError("depth sequence exceeds max_position_embeddings")
-        positions = mx.arange(length, dtype=mx.int32)
+        positions = mx.arange(offset, offset + length, dtype=mx.int32)
         hidden_states = inputs_embeds + self.pos_embedding(positions)[None, :, :]
-        for layer in self.layers:
-            hidden_states = layer(hidden_states)
+        layer_caches: list[Any] = cache if cache is not None else [None] * len(self.layers)
+        for layer, layer_cache in zip(self.layers, layer_caches):
+            hidden_states = layer(hidden_states, cache=layer_cache)
         return self.norm(hidden_states)
+
+
+def _depth_caches(decoder: RVQDepthDecoder) -> list[KVCache]:
+    caches = [KVCache() for _ in decoder.layers]
+    for cache in caches:
+        cache.step = decoder.config.max_position_embeddings
+    return caches
 
 
 def generate_depth_codes(
@@ -112,6 +153,7 @@ def generate_depth_codes(
     cfg_scale: float = 1.5,
     top_k: int = 50,
     model_config: ModelConfig | None = None,
+    use_cache: bool = True,
 ) -> tuple[mx.array, mx.array, mx.array]:
     """Generate residual RVQ codes for one conditional/unconditional frame pair."""
     if last_hidden.shape != (2, decoder.config.hidden_size):
@@ -127,9 +169,19 @@ def generate_depth_codes(
     sequence.append(decoder.projection(semantic_embed)[:, None, :])
     codes = [semantic_code]
     hidden_parts = []
+    cache = _depth_caches(decoder) if use_cache else None
+    cached_hidden = (
+        decoder(mx.concatenate(sequence, axis=1), cache=cache)[:, -1]
+        if cache is not None
+        else None
+    )
 
     for index in range(1, decoder.config.num_codebooks):
-        hidden = decoder(mx.concatenate(sequence, axis=1))[:, -1]
+        hidden = (
+            cached_hidden
+            if cached_hidden is not None
+            else decoder(mx.concatenate(sequence, axis=1))[:, -1]
+        )
         hidden_parts.append(hidden[:1])
         logits = decoder.audio_heads[index - 1](hidden).astype(mx.float32)
         conditional, unconditional = logits[0:1], logits[1:2]
@@ -140,7 +192,11 @@ def generate_depth_codes(
         if index < decoder.config.num_codebooks - 1:
             embedding_id = code + (index - 1) * decoder.config.audio_vocab_size
             embedded = decoder.audio_embeddings(embedding_id)
-            sequence.append(decoder.projection(embedded)[:, None, :])
+            next_embedding = decoder.projection(embedded)[:, None, :]
+            if cache is None:
+                sequence.append(next_embedding)
+            else:
+                cached_hidden = decoder(next_embedding, cache=cache)[:, -1]
 
     return mx.stack(codes, axis=1), mx.concatenate(hidden_parts, axis=-1), key
 

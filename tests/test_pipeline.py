@@ -5,7 +5,11 @@ from mlx_minimax_music3.condition_encoder import ConditionEncoder, ConditionEnco
 from mlx_minimax_music3.config import GenerationConfig, ModelConfig
 from mlx_minimax_music3.flow_transformer import FlowTransformer, FlowTransformerConfig
 from mlx_minimax_music3.language_model import LanguageModel, LanguageModelConfig
-from mlx_minimax_music3.pipeline import MiniMaxMusic3Pipeline, PipelineComponents
+from mlx_minimax_music3.pipeline import (
+    MiniMaxMusic3Pipeline,
+    PipelineComponents,
+    _flow_cfg_velocity,
+)
 from mlx_minimax_music3.rvq_decoder import RVQDecoderConfig, RVQDepthDecoder
 from mlx_minimax_music3.vocoder import Vocoder, VocoderConfig
 
@@ -152,3 +156,77 @@ def test_prompt_cfg_pair_is_created() -> None:
 
     np.testing.assert_array_equal(np.asarray(ids[0]), [1, 2, 3, 4, 5])
     np.testing.assert_array_equal(np.asarray(ids[1]), [1, 11, 11, 4, 5])
+
+
+def test_batched_flow_cfg_matches_separate_forwards() -> None:
+    mx.random.seed(43)
+    pipeline = tiny_pipeline()
+    latents = mx.random.normal((1, 7, 8))
+    condition = mx.random.normal((1, 7, 6))
+    timestep = mx.array([0.5])
+
+    separate = _flow_cfg_velocity(
+        pipeline.components.transformer,
+        latents,
+        timestep,
+        condition,
+        1.7,
+        batched=False,
+    )
+    batched = _flow_cfg_velocity(
+        pipeline.components.transformer,
+        latents,
+        timestep,
+        condition,
+        1.7,
+        batched=True,
+    )
+    mx.eval(separate, batched)
+
+    np.testing.assert_allclose(
+        np.asarray(batched),
+        np.asarray(separate),
+        atol=1e-5,
+        rtol=1e-5,
+    )
+
+
+def test_compiled_flow_cfg_matches_eager_forward() -> None:
+    mx.random.seed(47)
+    pipeline = tiny_pipeline()
+    latents = mx.random.normal((1, 7, 8))
+    condition = mx.random.normal((1, 7, 6))
+    timestep = mx.array([0.5])
+
+    eager = _flow_cfg_velocity(
+        pipeline.components.transformer,
+        latents,
+        timestep,
+        condition,
+        1.7,
+        batched=True,
+    )
+    compiled = _flow_cfg_velocity(
+        mx.compile(pipeline.components.transformer),
+        latents,
+        timestep,
+        condition,
+        1.7,
+        batched=True,
+    )
+    mx.eval(eager, compiled)
+
+    np.testing.assert_allclose(
+        np.asarray(compiled),
+        np.asarray(eager),
+        atol=1e-5,
+        rtol=1e-5,
+    )
+
+
+def test_dit_compile_is_limited_to_profitable_shapes() -> None:
+    pipeline = tiny_pipeline()
+
+    assert pipeline._flow_transformer(689, 30) is pipeline.components.transformer
+    assert pipeline._flow_transformer(172, 5) is pipeline.components.transformer
+    assert pipeline._flow_transformer(310, 30) is not pipeline.components.transformer

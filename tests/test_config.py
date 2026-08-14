@@ -1,6 +1,6 @@
 import pytest
 
-from mlx_minimax_music3.config import GenerationConfig, ModelConfig
+from mlx_minimax_music3.config import GenerationConfig, ModelConfig, OptimizationConfig
 
 
 def test_default_model_contract_matches_official_pipeline() -> None:
@@ -32,3 +32,26 @@ def test_invalid_or_subframe_duration_is_rejected(duration: float) -> None:
 def test_invalid_generation_parameters_are_rejected(config: GenerationConfig) -> None:
     with pytest.raises(ValueError):
         config.validate()
+
+
+def test_optimization_flags_can_be_disabled_independently() -> None:
+    config = OptimizationConfig.from_env(
+        {
+            "MLX_MUSIC3_PRUNED_HEAD": "off",
+            "MLX_MUSIC3_DEPTH_KV_CACHE": "0",
+            "MLX_MUSIC3_BATCHED_DIT_CFG": "false",
+            "MLX_MUSIC3_COMPILED_DIT": "no",
+        }
+    )
+
+    assert config == OptimizationConfig(
+        pruned_semantic_head=False,
+        depth_kv_cache=False,
+        batched_dit_cfg=False,
+        compiled_dit=False,
+    )
+
+
+def test_invalid_optimization_flag_is_rejected() -> None:
+    with pytest.raises(ValueError, match="MLX_MUSIC3_PRUNED_HEAD"):
+        OptimizationConfig.from_env({"MLX_MUSIC3_PRUNED_HEAD": "sometimes"})

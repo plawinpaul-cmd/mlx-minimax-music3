@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -61,6 +62,7 @@ class TimestepEmbedding(nn.Module):
         return self.linear_2(nn.silu(self.linear_1(hidden_states)))
 
 
+@lru_cache(maxsize=32)
 def rotary_frequencies(
     sequence_length: int,
     rotary_dim: int,
@@ -70,6 +72,7 @@ def rotary_frequencies(
         raise ValueError("sequence_length must be positive and rotary_dim must be non-negative even")
     if rotary_dim == 0:
         empty = mx.zeros((sequence_length, 0), dtype=mx.float32)
+        mx.eval(empty)
         return empty, empty
     inv_freq = 1.0 / (
         theta
@@ -81,7 +84,9 @@ def rotary_frequencies(
     steps = mx.arange(sequence_length, dtype=mx.float32)
     frequencies = steps[:, None] * inv_freq[None, :]
     frequencies = mx.concatenate((frequencies, frequencies), axis=-1)
-    return mx.cos(frequencies), mx.sin(frequencies)
+    cosine, sine = mx.cos(frequencies), mx.sin(frequencies)
+    mx.eval(cosine, sine)
+    return cosine, sine
 
 
 def apply_partial_rotary(
@@ -230,4 +235,3 @@ class FlowTransformer(nn.Module):
             hidden_states = block(hidden_states, rotary)
         hidden_states = self.proj_out(hidden_states[:, 1:])
         return self.postprocess_conv(hidden_states) + hidden_states
-

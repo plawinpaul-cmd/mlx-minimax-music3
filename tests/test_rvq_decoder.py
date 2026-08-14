@@ -1,6 +1,7 @@
 import mlx.core as mx
 import numpy as np
 import pytest
+from mlx_lm.models.cache import KVCache
 
 from mlx_minimax_music3.language_model import LanguageModel, LanguageModelConfig
 from mlx_minimax_music3.rvq_decoder import (
@@ -78,3 +79,68 @@ def test_depth_decoder_rejects_too_long_sequence() -> None:
     _, decoder = tiny_models()
     with pytest.raises(ValueError, match="exceeds"):
         decoder(mx.zeros((1, 9, 8)))
+
+
+def test_cached_depth_decoder_matches_full_sequence() -> None:
+    _, decoder = tiny_models()
+    inputs = mx.random.normal((2, 4, 8), key=mx.random.key(31))
+    full = decoder(inputs)
+
+    cache = [KVCache() for _ in decoder.layers]
+    for entry in cache:
+        entry.step = decoder.config.max_position_embeddings
+    prefix = decoder(inputs[:, :2], cache=cache)
+    third = decoder(inputs[:, 2:3], cache=cache)
+    fourth = decoder(inputs[:, 3:], cache=cache)
+    cached = mx.concatenate((prefix, third, fourth), axis=1)
+    mx.eval(full, cached)
+
+    np.testing.assert_allclose(
+        np.asarray(cached),
+        np.asarray(full),
+        atol=1e-5,
+        rtol=1e-5,
+    )
+
+
+def test_cached_depth_generation_matches_uncached_path() -> None:
+    language, decoder = tiny_models()
+    last_hidden = mx.random.normal((2, 8), key=mx.random.key(37))
+    semantic_code = mx.array([3, 3], dtype=mx.int32)
+    key = mx.random.key(41)
+
+    cached_codes, cached_hidden, cached_key = generate_depth_codes(
+        language,
+        decoder,
+        last_hidden,
+        semantic_code,
+        key,
+        top_k=1,
+        use_cache=True,
+    )
+    full_codes, full_hidden, full_key = generate_depth_codes(
+        language,
+        decoder,
+        last_hidden,
+        semantic_code,
+        key,
+        top_k=1,
+        use_cache=False,
+    )
+    mx.eval(
+        cached_codes,
+        cached_hidden,
+        cached_key,
+        full_codes,
+        full_hidden,
+        full_key,
+    )
+
+    np.testing.assert_array_equal(np.asarray(cached_codes), np.asarray(full_codes))
+    np.testing.assert_allclose(
+        np.asarray(cached_hidden),
+        np.asarray(full_hidden),
+        atol=1e-5,
+        rtol=1e-5,
+    )
+    np.testing.assert_array_equal(np.asarray(cached_key), np.asarray(full_key))

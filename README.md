@@ -16,7 +16,7 @@ The production path uses MLX on Metal. It does not import or execute PyTorch.
 - About 13.2 GiB for model weights
 - Sufficient unified-memory headroom
 
-The release was validated on an Apple M3 Max with 128 GB unified memory, macOS 27.0, Python 3.12.13, MLX 0.31.2, and MLX-LM 0.31.3. A 10-second, two-window, 30-step generation peaked at 23.34 GiB of MLX memory. Machines with 32 GB may be tight once macOS and other applications are included; this release has not been validated on lower-memory Macs.
+The release was validated on an Apple M3 Max with 128 GB unified memory, macOS 27.0, Python 3.12.13, MLX 0.31.2, and MLX-LM 0.31.3. An optimized 10-second, two-window, 30-step generation peaked at 22.03 GiB of MLX memory; the compatibility path peaked at 23.34 GiB. Machines with 32 GB may be tight once macOS and other applications are included; this release has not been validated on lower-memory Macs.
 
 ## Install
 
@@ -31,7 +31,7 @@ uv sync --extra server
 Or install the tagged release into an existing environment:
 
 ```bash
-python -m pip install "mlx-minimax-music3[server] @ git+https://github.com/vanch007/mlx-minimax-music3.git@v0.1.0"
+python -m pip install "mlx-minimax-music3[server] @ git+https://github.com/vanch007/mlx-minimax-music3.git@v0.2.0"
 ```
 
 ## Generate Music
@@ -107,6 +107,21 @@ curl -o song.wav http://127.0.0.1:8000/v1/audio/speech \
 
 `max_new_tokens` is the maximum number of 25 Hz audio frames. Streaming output is not supported by this release.
 
+## Runtime Optimizations
+
+The default runtime enables four independently reversible optimizations:
+
+- a 16,385-row semantic output head instead of evaluating all 200,000 vocabulary rows;
+- a per-frame KV cache for the seven residual RVQ decoding steps;
+- one batch-2 DiT forward for conditional and unconditional CFG;
+- cached RoPE tables and adaptive `mx.compile` for sequences up to 384 positions with at least 12 flow steps.
+
+Disable any path for compatibility testing with `MLX_MUSIC3_PRUNED_HEAD=0`, `MLX_MUSIC3_DEPTH_KV_CACHE=0`, `MLX_MUSIC3_BATCHED_DIT_CFG=0`, or `MLX_MUSIC3_COMPILED_DIT=0`. The same controls are available through `OptimizationConfig` in the Python API.
+
+On the validation M3 Max, semantic-head selection was exact for all 16,385 retained logits and reduced active MLX memory by 1.40 GiB. A fixed single-frame depth test fell from 113.1 ms to 54.5 ms with identical top-1 RVQ codes. Batch-2 DiT CFG was 5.2% faster in a same-model repeated test. Full measurements and benchmark-validity notes are retained in [the performance report](reports/performance-optimization.json).
+
+Optimized sampling preserves the model distribution but does not promise the same waveform for a fixed seed as the compatibility path. Compact categorical sampling and small cached-attention rounding differences can select a different valid top-k trajectory.
+
 ## Verify A Checkpoint
 
 ```bash
@@ -140,7 +155,7 @@ The retained [component parity report](reports/component-parity.json) compares t
 
 Local release validation also passed:
 
-- 91 automated tests
+- 101 automated tests
 - Strict load and finite-value audit of all 12 shards
 - 10-second generation with 250 AR frames, two overlapping chunks, and 30 flow steps
 - 44.1 kHz, 16-bit PCM, stereo output lasting 9.996 seconds

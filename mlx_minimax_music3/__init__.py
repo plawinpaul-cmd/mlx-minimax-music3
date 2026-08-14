@@ -1,15 +1,21 @@
 """Native Apple MLX inference for MiniMax Music 3."""
 
-from .config import GenerationConfig, ModelConfig
+from .config import GenerationConfig, ModelConfig, OptimizationConfig
 
-__all__ = ["GenerationConfig", "ModelConfig", "generate", "load_model"]
-__version__ = "0.1.0"
+__all__ = [
+    "GenerationConfig",
+    "ModelConfig",
+    "OptimizationConfig",
+    "generate",
+    "load_model",
+]
+__version__ = "0.2.0"
 
 
-def load_model(model):
+def load_model(model, *, optimization_config: OptimizationConfig | None = None):
     from .checkpoint import load_pipeline
 
-    return load_pipeline(model)
+    return load_pipeline(model, optimization_config=optimization_config)
 
 
 def generate(model, prompt: str, lyrics: str, **kwargs):
