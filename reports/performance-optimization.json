@@ -71,6 +71,36 @@
     "optimized_peak_memory_gib": 22.029984455555677,
     "clean_host_rerun": "pending"
   },
+  "official_complete_demo": {
+    "status": "pass",
+    "track": "Born In New",
+    "source": "https://minimax-ai.github.io/music3-demo/",
+    "official_duration_seconds": 118.073,
+    "requested_frames": 2952,
+    "response_chunks": 29,
+    "inference_steps": 30,
+    "seed": 7,
+    "http_status": 200,
+    "wall_seconds": 3385.959278334005,
+    "wall_minutes": 56.43265463890008,
+    "actual_audio_seconds": 118.22439909297051,
+    "seconds_per_audio_second": 28.640105632267325,
+    "realtime_factor": 28.640105632267325,
+    "power": "AC",
+    "load_average_before": [7.03076171875, 7.04345703125, 5.91845703125],
+    "load_average_after": [23.73681640625, 17.20556640625, 12.9228515625],
+    "wav": {
+      "path": "outputs/benchmark-official-demo/full-born-in-new-118s.wav",
+      "sample_rate": 44100,
+      "channels": 2,
+      "samples_per_channel": 5213696,
+      "finite": true,
+      "non_silent": true,
+      "peak": 0.99981689453125,
+      "rms": 0.1270322500769762,
+      "sha256": "c16628631cc4260993c328f83850ff3166aef9f726da71d3bc9599ab38984516"
+    }
+  },
   "verification": {
     "automated_tests": 101,
     "tests_status": "pass",

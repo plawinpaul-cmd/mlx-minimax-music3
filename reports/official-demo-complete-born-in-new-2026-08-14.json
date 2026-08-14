@@ -1,0 +1,65 @@
+{
+  "format": "mlx-minimax-music3-official-complete-benchmark-v1",
+  "status": "pass",
+  "started_at": "2026-08-14T14:15:45.011340+08:00",
+  "source": {
+    "demo_url": "https://minimax-ai.github.io/music3-demo/",
+    "title": "Born In New",
+    "track_id": "2a78b8a12d70b2f126a88ff8ea47587399e5d53567c0a6d0e2937aa91711a1bd",
+    "category": "instrumental",
+    "duration_ms": 118073,
+    "audio_url": "https://minimax-ai.github.io/music3-demo/assets/audio/tracks/2a78b8a12d70b2f126a88ff8ea47587399e5d53567c0a6d0e2937aa91711a1bd.mp3",
+    "caption_chars": 4864,
+    "lyrics_chars": 785
+  },
+  "request": {
+    "service_url": "http://127.0.0.1:8001/v1/audio/speech",
+    "seed": 7,
+    "frame_rate_hz": 25,
+    "max_new_tokens": 2952,
+    "num_inference_steps": 30
+  },
+  "environment": {
+    "power_before": "Now drawing from 'AC Power' |  -InternalBattery-0 (id=25165923)\t95%; AC attached; not charging present: true",
+    "load_average_before": [
+      7.03076171875,
+      7.04345703125,
+      5.91845703125
+    ],
+    "power_after": "Now drawing from 'AC Power' |  -InternalBattery-0 (id=25165923)\t95%; AC attached; not charging present: true",
+    "load_average_after": [
+      23.73681640625,
+      17.20556640625,
+      12.9228515625
+    ],
+    "hardware": "arm64",
+    "macos": "27.0",
+    "mlx": "0.31.2",
+    "mlx_lm": "0.31.3"
+  },
+  "completed_at": "2026-08-14T15:12:11.045967+08:00",
+  "result": {
+    "http_status": 200,
+    "response_frames": 2952,
+    "response_chunks": 29,
+    "wall_seconds": 3385.959278334005,
+    "wall_minutes": 56.43265463890008,
+    "official_duration_seconds": 118.073,
+    "actual_audio_seconds": 118.22439909297051,
+    "seconds_per_audio_second": 28.640105632267325,
+    "audio_seconds_per_wall_second": 0.03491607233715478,
+    "realtime_factor": 28.640105632267325,
+    "sampling_rate": 44100,
+    "channels": 2,
+    "samples_per_channel": 5213696,
+    "finite": true,
+    "non_silent": true,
+    "minimum": -0.99981689453125,
+    "maximum": 0.949127197265625,
+    "peak": 0.99981689453125,
+    "rms": 0.1270322500769762,
+    "sha256": "c16628631cc4260993c328f83850ff3166aef9f726da71d3bc9599ab38984516",
+    "file_bytes": 20854828,
+    "output": "/Users/vanch/mlx-minimax-music3/outputs/benchmark-official-demo/full-born-in-new-118s.wav"
+  }
+}

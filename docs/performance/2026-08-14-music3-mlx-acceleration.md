@@ -96,6 +96,8 @@ P0 was implemented behind independent environment and Python API switches:
 
 The adjacent 10-second high-load runs reduced observed generation time from 155.29 to 117.62 seconds and AR time from 46.53 to 23.43 seconds before adaptive compile was added. These numbers are retained only as provisional evidence because host load changed between runs. A clean-host end-to-end baseline remains `pending`; controlled component A/B results are the acceptance evidence for the implementation.
 
+The full official `Born In New` sample (118.073 seconds, 2,952 AR frames, 29 flow windows, 30 steps) completed on AC power in 3,385.96 seconds (56 minutes 25.96 seconds), or 28.64 seconds per generated audio second. Host load varied between 5.9 and 23.7, so the number is a valid full-length run but not a clean-machine baseline. The WAV is 118.224 seconds, 44.1 kHz, stereo, finite, non-silent, and retained with the full report.
+
 The optimized and compatibility paths need not produce identical fixed-seed waveforms. Head row selection itself is exact, but categorical sampling over a compact vocabulary changes random-number mapping, and cached attention introduces small BF16 rounding differences. The quality/listening comparison therefore remains `pending` rather than being described as perceptually identical.
 
 Additional primary references:
