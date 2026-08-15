@@ -1,3 +1,4 @@
+import json
 import os
 from argparse import Namespace
 from pathlib import Path
@@ -7,6 +8,7 @@ import pytest
 
 from scripts.compare_components import (
     COMPONENTS,
+    _source_shards,
     compare,
     make_inputs,
     metric_status,
@@ -49,9 +51,27 @@ def test_parity_metrics_reject_shape_mismatch() -> None:
         parity_metrics(np.zeros((2, 3)), np.zeros((3, 2)))
 
 
+def test_source_shards_reads_local_inventory_without_downloading(tmp_path) -> None:
+    component = tmp_path / "transformer"
+    component.mkdir()
+    (component / "diffusion_pytorch_model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"a": "part-2.safetensors", "b": "part-1.safetensors"}})
+    )
+
+    assert _source_shards("transformer", "unused", "unused", tmp_path, tmp_path) == [
+        "part-1.safetensors",
+        "part-2.safetensors",
+    ]
+
+
 def test_compare_preserves_reference_virtualenv_entrypoint(tmp_path, monkeypatch) -> None:
     reference = tmp_path / "reference"
     (reference / ".git").mkdir(parents=True)
+    (tmp_path / "config.json").write_text(
+        json.dumps(
+            {"quantization": {"group_size": 64, "bits": 4, "mode": "affine"}}
+        )
+    )
     venv_python = tmp_path / "venv" / "bin" / "python"
     venv_python.parent.mkdir(parents=True)
     venv_python.symlink_to(Path(os.sys.executable))
@@ -72,6 +92,7 @@ def test_compare_preserves_reference_virtualenv_entrypoint(tmp_path, monkeypatch
         checkpoint_revision="checkpoint",
         checkpoint_id=None,
         source_repo="source/model",
+        source_root=None,
         source_revision="source-revision",
         reference_device="cpu",
         report=tmp_path / "report.json",

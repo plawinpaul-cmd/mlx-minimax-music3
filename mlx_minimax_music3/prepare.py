@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from .checkpoint import component_config_dict, write_checkpoint_config
+from .checkpoint import QUANTIZATION, component_config_dict, write_checkpoint_config
 from .condition_encoder import ConditionEncoderConfig
 from .config import ModelConfig
 from .flow_transformer import FlowTransformerConfig
@@ -20,7 +21,10 @@ def _json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def checkpoint_config_from_source(source_root: Path) -> dict[str, Any]:
+def checkpoint_config_from_source(
+    source_root: Path,
+    quantization: Mapping[str, object] = QUANTIZATION,
+) -> dict[str, Any]:
     source_root = source_root.expanduser().resolve()
     language_source = _json(source_root / "language_model" / "config.json")
     rope = language_source.get("rope_parameters", {})
@@ -75,13 +79,25 @@ def checkpoint_config_from_source(source_root: Path) -> dict[str, Any]:
     if transformer.in_channels != vocoder.latent_channels:
         raise ValueError("source transformer and vocoder latent channels disagree")
 
-    return component_config_dict(model, language, rvq, condition, transformer, vocoder)
+    return component_config_dict(
+        model,
+        language,
+        rvq,
+        condition,
+        transformer,
+        vocoder,
+        quantization=quantization,
+    )
 
 
-def prepare_checkpoint_layout(source_root: Path, target_root: Path) -> dict[str, Any]:
+def prepare_checkpoint_layout(
+    source_root: Path,
+    target_root: Path,
+    quantization: Mapping[str, object] = QUANTIZATION,
+) -> dict[str, Any]:
     source_root = source_root.expanduser().resolve()
     target_root = target_root.expanduser().resolve()
-    config = checkpoint_config_from_source(source_root)
+    config = checkpoint_config_from_source(source_root, quantization)
     write_checkpoint_config(target_root, config)
 
     tokenizer_source = source_root / "tokenizer"
@@ -99,4 +115,3 @@ def prepare_checkpoint_layout(source_root: Path, target_root: Path) -> dict[str,
         raise FileNotFoundError("source LICENSE is missing")
     shutil.copy2(license_source, target_root / "LICENSE")
     return config
-

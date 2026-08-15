@@ -91,6 +91,7 @@ def main() -> int:
     parser.add_argument("--component", required=True)
     parser.add_argument("--source-shard", required=True)
     parser.add_argument("--shard-size-gib", type=float, default=1.0)
+    parser.add_argument("--bits", type=int, choices=(4, 8), default=8)
     parser.add_argument("--delete-source", action="store_true")
     parser.add_argument("--delete-output", action="store_true")
     args = parser.parse_args()
@@ -99,7 +100,8 @@ def main() -> int:
 
     source_root = args.source_root.expanduser().resolve()
     output_root = args.output.expanduser().resolve()
-    prepare_checkpoint_layout(source_root, output_root)
+    quantization = {"group_size": 64, "bits": args.bits, "mode": "affine"}
+    prepare_checkpoint_layout(source_root, output_root, quantization)
     if Path(args.source_shard).name != args.source_shard:
         raise ValueError("--source-shard must be a basename")
 
@@ -121,6 +123,7 @@ def main() -> int:
         args.component,
         args.source_shard,
         shard_size=int(args.shard_size_gib * 1024**3),
+        quantization=quantization,
     )
     api = HfApi()
     manifest = verify_and_mark(api, args.target_repo, output_root, args.component)

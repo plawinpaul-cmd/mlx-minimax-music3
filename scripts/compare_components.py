@@ -155,20 +155,24 @@ def _source_shards(
     repo_id: str,
     revision: str,
     local_dir: Path,
+    source_root: Path | None = None,
 ) -> list[str]:
     from huggingface_hub import hf_hub_download
 
     index_name, single_name = SOURCE_LAYOUT[component]
     if single_name is not None:
         return [single_name]
-    index_path = Path(
-        hf_hub_download(
-            repo_id,
-            filename=f"{component}/{index_name}",
-            revision=revision,
-            local_dir=local_dir,
+    if source_root is not None:
+        index_path = source_root / component / index_name
+    else:
+        index_path = Path(
+            hf_hub_download(
+                repo_id,
+                filename=f"{component}/{index_name}",
+                revision=revision,
+                local_dir=local_dir,
+            )
         )
-    )
     index = json.loads(index_path.read_text(encoding="utf-8"))
     return sorted(set(index["weight_map"].values()))
 
@@ -179,6 +183,7 @@ def _load_reference_weights(
     repo_id: str,
     revision: str,
     local_dir: Path,
+    source_root: Path | None = None,
 ) -> dict:
     import torch
     from huggingface_hub import hf_hub_download
@@ -186,16 +191,19 @@ def _load_reference_weights(
 
     expected = set(model.state_dict())
     loaded: set[str] = set()
-    shard_names = _source_shards(component, repo_id, revision, local_dir)
+    shard_names = _source_shards(component, repo_id, revision, local_dir, source_root)
     for name in shard_names:
-        source_path = Path(
-            hf_hub_download(
-                repo_id,
-                filename=f"{component}/{name}",
-                revision=revision,
-                local_dir=local_dir,
+        if source_root is not None:
+            source_path = source_root / component / name
+        else:
+            source_path = Path(
+                hf_hub_download(
+                    repo_id,
+                    filename=f"{component}/{name}",
+                    revision=revision,
+                    local_dir=local_dir,
+                )
             )
-        )
         weights = load_file(source_path, device="cpu")
         overlap = loaded & set(weights)
         if overlap:
@@ -206,7 +214,8 @@ def _load_reference_weights(
         loaded.update(weights)
         del weights
         gc.collect()
-        source_path.unlink()
+        if source_root is None:
+            source_path.unlink()
     missing = expected - loaded
     unexpected = loaded - expected
     if missing or unexpected:
@@ -264,6 +273,7 @@ def reference_worker(args: argparse.Namespace) -> dict:
             args.source_repo,
             args.source_revision,
             Path(temporary),
+            args.source_root.expanduser().resolve() if args.source_root is not None else None,
         )
     output = _reference_forward(args.component, model, inputs, args.reference_device)
     np.save(args.output, output)
@@ -278,7 +288,11 @@ def reference_worker(args: argparse.Namespace) -> dict:
 def mlx_worker(args: argparse.Namespace) -> dict:
     import mlx.core as mx
 
-    from mlx_minimax_music3.checkpoint import load_component, read_checkpoint_config
+    from mlx_minimax_music3.checkpoint import (
+        load_component,
+        quantization_for_component,
+        read_checkpoint_config,
+    )
     from mlx_minimax_music3.condition_encoder import ConditionEncoder, ConditionEncoderConfig
     from mlx_minimax_music3.flow_transformer import FlowTransformer, FlowTransformerConfig
     from mlx_minimax_music3.language_model import LanguageModel, LanguageModelConfig
@@ -296,7 +310,12 @@ def mlx_worker(args: argparse.Namespace) -> dict:
         "transformer": lambda: FlowTransformer(FlowTransformerConfig(**config)),
         "vocoder": lambda: Vocoder(VocoderConfig(**config)),
     }
-    model = load_component(args.component, constructors[args.component](), model_path)
+    model = load_component(
+        args.component,
+        constructors[args.component](),
+        model_path,
+        quantization_for_component(checkpoint, args.component),
+    )
     inputs = dict(np.load(args.input))
     if args.component == "language_model":
         output = model(mx.array(inputs["input_ids"], dtype=mx.int32))
@@ -342,6 +361,8 @@ def _run_worker(python: Path, script: Path, args: list[str], env: dict[str, str]
 
 def compare(args: argparse.Namespace) -> dict:
     model_path = args.model.expanduser().resolve()
+    checkpoint_config = json.loads((model_path / "config.json").read_text(encoding="utf-8"))
+    quantization = checkpoint_config["quantization"]
     reference_source = args.reference_source.expanduser().resolve()
     # Keep the virtual-environment entry point intact. Resolving its symlink
     # bypasses the environment's site-packages and invokes the base interpreter.
@@ -365,7 +386,10 @@ def compare(args: argparse.Namespace) -> dict:
         "reference_implementation": "huggingface/diffusers",
         "reference_revision": args.reference_revision,
         "reference_precision": "BF16",
-        "release_precision": "selective affine 8-bit group-size 64 with BF16 exceptions",
+        "release_precision": (
+            f"selective {quantization['mode']} {quantization['bits']}-bit "
+            f"group-size {quantization['group_size']} with BF16 exceptions"
+        ),
         "components": {},
     }
     if args.report.is_file():
@@ -400,6 +424,11 @@ def compare(args: argparse.Namespace) -> dict:
                 "--input",
                 str(input_path),
             ]
+            source_root_args = (
+                ["--source-root", str(args.source_root.expanduser().resolve())]
+                if args.source_root is not None
+                else []
+            )
             reference_metadata = _run_worker(
                 reference_python,
                 script,
@@ -415,6 +444,7 @@ def compare(args: argparse.Namespace) -> dict:
                     args.source_revision,
                     "--reference-device",
                     args.reference_device,
+                    *source_root_args,
                 ],
                 env,
             )
@@ -453,6 +483,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reference-python", type=Path)
     parser.add_argument("--reference-source", type=Path)
     parser.add_argument("--source-repo", default=DEFAULT_SOURCE_REPO)
+    parser.add_argument("--source-root", type=Path)
     parser.add_argument("--source-revision", default=DEFAULT_SOURCE_REVISION)
     parser.add_argument("--reference-revision", default=DEFAULT_REFERENCE_REVISION)
     parser.add_argument("--checkpoint-revision", required=False, default="local")

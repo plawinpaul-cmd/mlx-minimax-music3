@@ -44,6 +44,18 @@ def test_quantized_tensor_emits_mlx_triplet() -> None:
     assert converted["model.layers.0.self_attn.q_proj.weight"].dtype == mx.uint32
 
 
+def test_quantized_tensor_supports_four_bit_affine_weights() -> None:
+    weight = mx.arange(64 * 64).reshape(64, 64).astype(mx.bfloat16)
+    converted = convert_tensor(
+        "language_model",
+        "model.layers.0.self_attn.q_proj.weight",
+        weight,
+        quantization={"group_size": 64, "bits": 4, "mode": "affine"},
+    )
+
+    assert converted["model.layers.0.self_attn.q_proj.weight"].shape == (64, 8)
+
+
 def test_vocoder_conversion_folds_and_transposes() -> None:
     source = {
         "conv_in.weight_g": mx.array([[[10.0]], [[2.0]]]),
@@ -64,7 +76,8 @@ def test_vocoder_conversion_folds_and_transposes() -> None:
     assert converted["snake_out.alpha"].shape == (1, 1, 2)
 
 
-def test_language_conversion_round_trip_strict_load(tmp_path) -> None:
+@pytest.mark.parametrize("bits", [4, 8])
+def test_language_conversion_round_trip_strict_load(tmp_path, bits: int) -> None:
     mx.random.seed(31)
     config = small_language_config()
     source_model = LanguageModel(config)
@@ -76,11 +89,13 @@ def test_language_conversion_round_trip_strict_load(tmp_path) -> None:
     }
     mx.save_safetensors(source_dir / "model.safetensors", source_weights)
 
+    quantization = {"group_size": 64, "bits": bits, "mode": "affine"}
     manifest = convert_component(
         tmp_path / "source",
         tmp_path / "target",
         "language_model",
         shard_size=40_000,
+        quantization=quantization,
     )
     assert manifest["status"] == "complete"
     assert manifest["processed_source_files"] == ["model.safetensors"]
@@ -90,10 +105,11 @@ def test_language_conversion_round_trip_strict_load(tmp_path) -> None:
         "language_model",
         LanguageModel(config),
         tmp_path / "target",
+        quantization,
     )
     reference = LanguageModel(config)
     reference.load_weights(list(source_weights.items()), strict=True)
-    apply_component_quantization("language_model", reference)
+    apply_component_quantization("language_model", reference, quantization)
     mx.eval(reference.parameters(), converted.parameters())
 
     ids = mx.array([[1, 2, 3]], dtype=mx.int32)

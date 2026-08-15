@@ -14,7 +14,9 @@ from .checkpoint import (
     COMPONENTS,
     QUANTIZATION,
     is_quantized_path,
+    quantization_for_component,
     read_checkpoint_config,
+    validate_quantization,
 )
 from .vocoder import (
     fold_weight_norm,
@@ -79,12 +81,19 @@ def _as_bfloat16(value: mx.array) -> mx.array:
     return value.astype(mx.bfloat16)
 
 
-def convert_tensor(component: str, key: str, value: mx.array) -> dict[str, mx.array]:
+def convert_tensor(
+    component: str,
+    key: str,
+    value: mx.array,
+    *,
+    quantization: Mapping[str, object] = QUANTIZATION,
+) -> dict[str, mx.array]:
+    quantization = validate_quantization(quantization)
     if key.endswith(".weight") and value.ndim == 2:
         module_path = key.removesuffix(".weight")
         if is_quantized_path(component, module_path):
             source = value.astype(mx.bfloat16)
-            packed, scales, biases = mx.quantize(source, **QUANTIZATION)
+            packed, scales, biases = mx.quantize(source, **quantization)
             return {
                 key: packed,
                 f"{module_path}.scales": scales,
@@ -141,6 +150,7 @@ def _converted_tensors(
     component: str,
     source_files: list[Path],
     completed: set[str],
+    quantization: Mapping[str, object],
 ) -> Iterator[tuple[str, mx.array]]:
     if component == "vocoder":
         if len(source_files) != 1:
@@ -154,18 +164,27 @@ def _converted_tensors(
     for source_file in source_files:
         weights = mx.load(source_file)
         for source_key in sorted(weights):
-            converted = convert_tensor(component, source_key, weights[source_key])
+            converted = convert_tensor(
+                component,
+                source_key,
+                weights[source_key],
+                quantization=quantization,
+            )
             for key, value in converted.items():
                 if key not in completed:
                     yield key, value
 
 
-def _new_manifest(component: str, source_files: list[Path]) -> dict[str, Any]:
+def _new_manifest(
+    component: str,
+    source_files: list[Path],
+    quantization: Mapping[str, object],
+) -> dict[str, Any]:
     return {
         "format": CHECKPOINT_FORMAT,
         "component": component,
         "status": "in_progress",
-        "quantization": dict(QUANTIZATION),
+        "quantization": validate_quantization(quantization),
         "source_files": [path.name for path in source_files],
         "processed_source_files": [],
         "shards": [],
@@ -178,12 +197,13 @@ def _load_resume_manifest(
     target_dir: Path,
     component: str,
     source_files: list[Path],
+    quantization: Mapping[str, object],
 ) -> dict[str, Any]:
     path = target_dir / MANIFEST_NAME
     if not path.exists():
-        return _new_manifest(component, source_files)
+        return _new_manifest(component, source_files, quantization)
     manifest = json.loads(path.read_text(encoding="utf-8"))
-    expected = _new_manifest(component, source_files)
+    expected = _new_manifest(component, source_files, quantization)
     for field in ("format", "component", "quantization", "source_files"):
         if manifest.get(field) != expected[field]:
             raise ValueError(f"resume manifest field {field!r} does not match this conversion")
@@ -279,6 +299,7 @@ def convert_component(
     component: str,
     *,
     shard_size: int = DEFAULT_SHARD_SIZE,
+    quantization: Mapping[str, object] = QUANTIZATION,
 ) -> dict[str, Any]:
     if component not in {
         "language_model",
@@ -294,7 +315,8 @@ def convert_component(
     source_files = _source_weight_files(source_root / component)
     target_dir = target_root / component
     target_dir.mkdir(parents=True, exist_ok=True)
-    manifest = _load_resume_manifest(target_dir, component, source_files)
+    quantization = validate_quantization(quantization)
+    manifest = _load_resume_manifest(target_dir, component, source_files, quantization)
     if manifest.get("status") == "complete":
         return manifest
 
@@ -302,7 +324,7 @@ def convert_component(
     pending: dict[str, mx.array] = {}
     pending_size = 0
     shard_number = _next_shard_number(manifest)
-    for key, value in _converted_tensors(component, source_files, completed):
+    for key, value in _converted_tensors(component, source_files, completed, quantization):
         value_size = value.nbytes
         if pending and pending_size + value_size > shard_size:
             _flush_shard(target_dir, pending, manifest, shard_number)
@@ -332,6 +354,7 @@ def convert_component_source_shard(
     source_filename: str,
     *,
     shard_size: int = DEFAULT_SHARD_SIZE,
+    quantization: Mapping[str, object] = QUANTIZATION,
 ) -> dict[str, Any]:
     """Convert one official source shard and leave a resumable component manifest."""
     if component not in {
@@ -358,7 +381,8 @@ def convert_component_source_shard(
 
     target_dir = target_root / component
     target_dir.mkdir(parents=True, exist_ok=True)
-    manifest = _load_resume_manifest(target_dir, component, inventory)
+    quantization = validate_quantization(quantization)
+    manifest = _load_resume_manifest(target_dir, component, inventory, quantization)
     if source_filename in manifest["processed_source_files"]:
         return manifest
     if manifest.get("status") == "complete":
@@ -368,7 +392,7 @@ def convert_component_source_shard(
     pending: dict[str, mx.array] = {}
     pending_size = 0
     shard_number = _next_shard_number(manifest)
-    for key, value in _converted_tensors(component, [source_file], completed):
+    for key, value in _converted_tensors(component, [source_file], completed, quantization):
         value_size = value.nbytes
         if pending and pending_size + value_size > shard_size:
             _flush_shard(target_dir, pending, manifest, shard_number)
@@ -395,7 +419,7 @@ def convert_component_source_shard(
 
 def audit_checkpoint(model_path: Path, *, load_tensors: bool = True) -> dict[str, Any]:
     model_path = model_path.expanduser().resolve()
-    read_checkpoint_config(model_path)
+    config = read_checkpoint_config(model_path)
     if not (model_path / "tokenizer" / "tokenizer.json").is_file():
         raise FileNotFoundError("checkpoint tokenizer/tokenizer.json is missing")
 
@@ -416,6 +440,8 @@ def audit_checkpoint(model_path: Path, *, load_tensors: bool = True) -> dict[str
             raise ValueError(f"component {component} is not complete")
         if manifest.get("component") != component or manifest.get("format") != CHECKPOINT_FORMAT:
             raise ValueError(f"component manifest identity mismatch: {component}")
+        if manifest.get("quantization") != quantization_for_component(config, component):
+            raise ValueError(f"component manifest quantization mismatch: {component}")
 
         index_path = component_dir / "model.safetensors.index.json"
         index = json.loads(index_path.read_text(encoding="utf-8"))

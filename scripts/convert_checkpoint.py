@@ -20,11 +20,13 @@ def main() -> int:
         default="all",
     )
     parser.add_argument("--shard-size-gib", type=float, default=2.0)
+    parser.add_argument("--bits", type=int, choices=(4, 8), default=8)
     args = parser.parse_args()
     if args.shard_size_gib <= 0:
         parser.error("--shard-size-gib must be positive")
 
-    prepare_checkpoint_layout(args.source, args.output)
+    quantization = {"group_size": 64, "bits": args.bits, "mode": "affine"}
+    prepare_checkpoint_layout(args.source, args.output, quantization)
     selected = COMPONENTS if args.component == "all" else (args.component,)
     reports = {}
     for component in selected:
@@ -33,6 +35,7 @@ def main() -> int:
             args.output,
             component,
             shard_size=int(args.shard_size_gib * 1024**3),
+            quantization=quantization,
         )
     print(json.dumps(reports, indent=2))
     return 0
@@ -40,4 +43,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -72,13 +73,44 @@ def is_quantized_path(component: str, path: str) -> bool:
     return False
 
 
-def apply_component_quantization(component: str, model: nn.Module) -> list[str]:
+def validate_quantization(quantization: Mapping[str, object]) -> dict[str, int | str]:
+    if set(quantization) != {"group_size", "bits", "mode"}:
+        raise ValueError("checkpoint quantization metadata has unsupported fields")
+    group_size = quantization.get("group_size")
+    bits = quantization.get("bits")
+    mode = quantization.get("mode")
+    if group_size != 64 or bits not in {4, 8} or mode != "affine":
+        raise ValueError("checkpoint quantization metadata is not supported")
+    return {"group_size": int(group_size), "bits": int(bits), "mode": str(mode)}
+
+
+def quantization_for_component(config: Mapping[str, object], component: str) -> dict[str, int | str]:
+    if component not in COMPONENTS:
+        raise ValueError(f"unknown component: {component}")
+    default = config.get("quantization")
+    if not isinstance(default, dict):
+        raise ValueError("checkpoint quantization metadata is missing")
+    overrides = config.get("component_quantization", {})
+    if not isinstance(overrides, dict):
+        raise ValueError("checkpoint component quantization metadata is invalid")
+    override = overrides.get(component, default)
+    if not isinstance(override, dict):
+        raise ValueError(f"checkpoint quantization metadata is invalid for {component}")
+    return validate_quantization(override)
+
+
+def apply_component_quantization(
+    component: str,
+    model: nn.Module,
+    quantization: Mapping[str, object] = QUANTIZATION,
+) -> list[str]:
+    quantization = validate_quantization(quantization)
     quantized: list[str] = []
 
     def predicate(path: str, module: nn.Module) -> bool:
         selected = (
             isinstance(module, nn.Linear)
-            and module.weight.shape[-1] % QUANTIZATION["group_size"] == 0
+            and module.weight.shape[-1] % quantization["group_size"] == 0
             and is_quantized_path(component, path)
         )
         if selected:
@@ -87,9 +119,9 @@ def apply_component_quantization(component: str, model: nn.Module) -> list[str]:
 
     nn.quantize(
         model,
-        group_size=QUANTIZATION["group_size"],
-        bits=QUANTIZATION["bits"],
-        mode=QUANTIZATION["mode"],
+        group_size=quantization["group_size"],
+        bits=quantization["bits"],
+        mode=quantization["mode"],
         class_predicate=predicate,
     )
     return quantized
@@ -102,6 +134,8 @@ def component_config_dict(
     condition_encoder: ConditionEncoderConfig,
     transformer: FlowTransformerConfig,
     vocoder: VocoderConfig,
+    *,
+    quantization: Mapping[str, object] = QUANTIZATION,
 ) -> dict[str, Any]:
     return {
         "format": CHECKPOINT_FORMAT,
@@ -113,7 +147,7 @@ def component_config_dict(
             "transformer": asdict(transformer),
             "vocoder": asdict(vocoder),
         },
-        "quantization": dict(QUANTIZATION),
+        "quantization": validate_quantization(quantization),
     }
 
 
@@ -129,8 +163,18 @@ def read_checkpoint_config(path: Path) -> dict[str, Any]:
     config = json.loads((path / "config.json").read_text(encoding="utf-8"))
     if config.get("format") != CHECKPOINT_FORMAT:
         raise ValueError(f"unsupported checkpoint format: {config.get('format')!r}")
-    if config.get("quantization") != QUANTIZATION:
-        raise ValueError("checkpoint quantization metadata does not match the runtime")
+    quantization = config.get("quantization")
+    if not isinstance(quantization, dict):
+        raise ValueError("checkpoint quantization metadata is missing")
+    validate_quantization(quantization)
+    component_quantization = config.get("component_quantization", {})
+    if not isinstance(component_quantization, dict):
+        raise ValueError("checkpoint component quantization metadata is invalid")
+    unknown = set(component_quantization) - set(COMPONENTS)
+    if unknown:
+        raise ValueError(f"checkpoint has quantization for unknown components: {sorted(unknown)}")
+    for component in component_quantization:
+        quantization_for_component(config, component)
     missing = set(COMPONENTS) - set(config.get("components", {}))
     if missing:
         raise ValueError(f"checkpoint is missing component configs: {sorted(missing)}")
@@ -168,8 +212,13 @@ def load_component_weights(component_dir: Path) -> dict[str, mx.array]:
     return weights
 
 
-def load_component(component: str, model: nn.Module, model_path: Path) -> nn.Module:
-    apply_component_quantization(component, model)
+def load_component(
+    component: str,
+    model: nn.Module,
+    model_path: Path,
+    quantization: Mapping[str, object] = QUANTIZATION,
+) -> nn.Module:
+    apply_component_quantization(component, model, quantization)
     weights = load_component_weights(model_path / component)
     model.load_weights(list(weights.items()), strict=True)
     mx.eval(model.parameters())
@@ -193,26 +242,31 @@ def load_pipeline(model: str | Path) -> MiniMaxMusic3Pipeline:
         "language_model",
         LanguageModel(LanguageModelConfig.from_dict(components["language_model"])),
         model_path,
+        quantization_for_component(config, "language_model"),
     )
     rvq = load_component(
         "rvq_depth_decoder",
         RVQDepthDecoder(RVQDecoderConfig(**components["rvq_depth_decoder"])),
         model_path,
+        quantization_for_component(config, "rvq_depth_decoder"),
     )
     condition = load_component(
         "condition_encoder",
         ConditionEncoder(ConditionEncoderConfig(**components["condition_encoder"])),
         model_path,
+        quantization_for_component(config, "condition_encoder"),
     )
     transformer = load_component(
         "transformer",
         FlowTransformer(FlowTransformerConfig(**components["transformer"])),
         model_path,
+        quantization_for_component(config, "transformer"),
     )
     vocoder = load_component(
         "vocoder",
         Vocoder(VocoderConfig(**components["vocoder"])),
         model_path,
+        quantization_for_component(config, "vocoder"),
     )
 
     from tokenizers import Tokenizer
@@ -229,4 +283,3 @@ def load_pipeline(model: str | Path) -> MiniMaxMusic3Pipeline:
         ),
         model_config=ModelConfig(**config["model"]),
     )
-

@@ -8,6 +8,7 @@ from mlx_minimax_music3.checkpoint import (
     QUANTIZATION,
     apply_component_quantization,
     load_component_weights,
+    quantization_for_component,
     read_checkpoint_config,
     write_checkpoint_config,
 )
@@ -32,6 +33,18 @@ def test_language_quantization_selects_backbone_but_not_output_head() -> None:
     assert isinstance(model.lm_head, nn.Linear)
     parameters = model.model.layers[0].self_attn.q_proj.parameters()
     assert set(parameters) == {"weight", "scales", "biases"}
+
+
+def test_language_quantization_accepts_four_bit_checkpoint() -> None:
+    model = QuantizableModel()
+    selected = apply_component_quantization(
+        "language_model",
+        model,
+        {"group_size": 64, "bits": 4, "mode": "affine"},
+    )
+
+    assert selected == ["model.layers.0.self_attn.q_proj"]
+    assert model.model.layers[0].self_attn.q_proj.bits == 4
 
 
 def test_checkpoint_config_is_atomic_and_validated(tmp_path) -> None:
@@ -68,6 +81,69 @@ def test_checkpoint_rejects_unknown_quantization(tmp_path) -> None:
     }
     (tmp_path / "config.json").write_text(json.dumps(config))
     with pytest.raises(ValueError, match="quantization"):
+        read_checkpoint_config(tmp_path)
+
+
+def test_checkpoint_accepts_four_bit_quantization(tmp_path) -> None:
+    config = {
+        "format": "mlx-minimax-music3-v1",
+        "model": {},
+        "components": {name: {} for name in (
+            "language_model",
+            "rvq_depth_decoder",
+            "condition_encoder",
+            "transformer",
+            "vocoder",
+        )},
+        "quantization": {"group_size": 64, "bits": 4, "mode": "affine"},
+    }
+    (tmp_path / "config.json").write_text(json.dumps(config))
+
+    assert read_checkpoint_config(tmp_path) == config
+
+
+def test_component_quantization_overrides_checkpoint_default(tmp_path) -> None:
+    config = {
+        "format": "mlx-minimax-music3-v1",
+        "model": {},
+        "components": {name: {} for name in (
+            "language_model",
+            "rvq_depth_decoder",
+            "condition_encoder",
+            "transformer",
+            "vocoder",
+        )},
+        "quantization": {"group_size": 64, "bits": 4, "mode": "affine"},
+        "component_quantization": {
+            "transformer": {"group_size": 64, "bits": 8, "mode": "affine"}
+        },
+    }
+    (tmp_path / "config.json").write_text(json.dumps(config))
+
+    loaded = read_checkpoint_config(tmp_path)
+    assert quantization_for_component(loaded, "language_model")["bits"] == 4
+    assert quantization_for_component(loaded, "transformer")["bits"] == 8
+
+
+def test_checkpoint_rejects_unknown_component_quantization(tmp_path) -> None:
+    config = {
+        "format": "mlx-minimax-music3-v1",
+        "model": {},
+        "components": {name: {} for name in (
+            "language_model",
+            "rvq_depth_decoder",
+            "condition_encoder",
+            "transformer",
+            "vocoder",
+        )},
+        "quantization": {"group_size": 64, "bits": 4, "mode": "affine"},
+        "component_quantization": {
+            "unknown": {"group_size": 64, "bits": 8, "mode": "affine"}
+        },
+    }
+    (tmp_path / "config.json").write_text(json.dumps(config))
+
+    with pytest.raises(ValueError, match="unknown components"):
         read_checkpoint_config(tmp_path)
 
 
